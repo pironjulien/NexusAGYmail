@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.pironjulien/nexus-agymail",
+  "title": "NexusAGYmail",
+  "description": "Gmail for AI agents through the official API: Google's tool names, sends only after the user's yes.",
+  "version": "0.8.0",
+  "websiteUrl": "https://julienpiron.fr/nexusagymail/",
+  "repository": {
+    "url": "https://github.com/pironjulien/NexusAGYmail",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "nexus-agymail",
+      "version": "0.8.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "NEXUS_AGYMAIL_HOME",
+          "description": "State folder (token, OAuth client) instead of ~/.nexus/nexus-agymail",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "NEXUS_AGYMAIL_CLIENT_SECRET",
+          "description": "Path of your Desktop app OAuth client JSON (otherwise the copy made by `nexus-agymail auth`)",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "NEXUS_AGYMAIL_PROTECTED",
+          "description": "Extra folders whose files are never attached to a draft (os.pathsep-separated)",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

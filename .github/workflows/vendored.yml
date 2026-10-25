@@ -1,0 +1,21 @@
+# Written by the export step (nexus-publish). The shared modules listed in vendored.sha256 are embedded from the
+# author's private common folder (nexus-windows/commun at be0990f) and must stay byte-identical to that version: change them
+# upstream, never here.
+name: Vendored modules
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: sha256sum -c vendored.sha256
+        run: sha256sum --strict -c vendored.sha256

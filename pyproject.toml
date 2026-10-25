@@ -1,0 +1,64 @@
+[project]
+name = "nexus-agymail"
+version = "0.8.0"
+description = "Gmail MCP server for AI agents: official Gmail API, Google's tool names, sending only after the user's yes, no permanent deletion"
+authors = [{ name = "Julien Piron" }]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.14"
+keywords = ["mcp", "mcp-server", "gmail", "email", "ai-agents", "antigravity", "claude", "codex", "prompt-injection"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Communications :: Email",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "mcp>=2.3.0",
+    "google-api-python-client>=2.160.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.0",
+]
+
+[project.urls]
+Homepage = "https://julienpiron.fr/nexusagymail/"
+Repository = "https://github.com/pironjulien/NexusAGYmail"
+Changelog = "https://github.com/pironjulien/NexusAGYmail/blob/main/CHANGELOG.md"
+
+[project.scripts]
+nexus-agymail = "nexus_agymail.server:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+    "pyright==1.1.407",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+cache-dir = "~/.nexus/nexus-agymail/cache/ruff"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.14"
+pythonPlatform = "Windows"
+# Les tests importent fake_gmail depuis leur propre dossier (sys.path).
+extraPaths = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

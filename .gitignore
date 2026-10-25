@@ -1,0 +1,18 @@
+# Python et caches (normalement hors dépôt : -B, PYTHONDONTWRITEBYTECODE, caches sous ~\.nexus\nexus-agymail)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Secrets : ne vivent jamais dans le dépôt (~\.nexus\nexus-agymail ou NexusSecure)
+token.json
+token.bin
+token.lock
+*.tmp
+client_secret*.json
+credentials.json
+*.log
