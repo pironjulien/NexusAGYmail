@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from nexus_agymail import __version__, cli, register
+from nexus_agymail import cli, register
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def test_setup_declare_le_plugin_antigravity(gemini, capsys):
     assert cli.main(["setup"]) == 0
     plugin = gemini / "plugins" / "nexus-agymail"
     server = json.loads((plugin / "mcp_config.json").read_text(encoding="utf-8"))["mcpServers"]["nexus-agymail"]
-    assert server["args"] == ["--python", "3.14", f"nexus-agymail=={__version__}"]
+    assert server["args"] == ["--python", "3.14", "nexus-agymail@latest"]  # dernière version à chaque démarrage
     assert (plugin / "skills" / "nexus-agymail" / "SKILL.md").is_file() and (plugin / "plugin.json").is_file()
     out = capsys.readouterr().out
     assert "Antigravity: plugin" in out and "not signed in yet" in out and "--client-secret" in out

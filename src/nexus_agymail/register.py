@@ -1,5 +1,6 @@
 """Déclaration du serveur chez Antigravity (`nexus-agymail setup`, pack Nexus), comme NexusAndroid : le plugin
-~/.gemini/config/plugins/nexus-agymail (compétence et serveur, entrée stdio `uvx --python 3.14 nexus-agymail==<version>`),
+~/.gemini/config/plugins/nexus-agymail (compétence et serveur, entrée stdio `uvx --python 3.14 nexus-agymail@latest` :
+la dernière version au démarrage d'Antigravity),
 jamais d'entrée dans le mcp_config.json global (une ancienne entrée à nous y est retirée).
 
 Claude et Codex ont leur connecteur Gmail officiel : rien n'y est déclaré (le README donne la configuration à la main).
@@ -14,8 +15,6 @@ import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-
-from . import __version__
 
 NAME = "nexus-agymail"
 PLUGIN_SOURCE = Path(__file__).resolve().parent / "plugin"
@@ -35,18 +34,19 @@ def uvx() -> str:
 
 
 def entry() -> dict:
-    return {"command": uvx(), "args": ["--python", "3.14", f"{NAME}=={__version__}"]}
+    # @latest : uvx reprend la dernière version publiée à chaque démarrage d'Antigravity (mise à jour sans installeur).
+    return {"command": uvx(), "args": ["--python", "3.14", f"{NAME}@latest"]}
 
 
 def ours(existing: object) -> bool:
-    """Entrée écrite par cet installeur (uvx … nexus-agymail[==x]), ou aucune."""
+    """Entrée écrite par cet installeur (uvx … nexus-agymail, ==x ou @latest), ou aucune."""
     if existing is None:
         return True
     if not isinstance(existing, dict):
         return False
     command = Path(str(existing.get("command", ""))).name.lower()
     args = [str(a) for a in existing.get("args", [])]
-    return command in {"uvx", "uvx.exe"} and any(re.fullmatch(rf"{NAME}(==[\w.]+)?", a) for a in args)
+    return command in {"uvx", "uvx.exe"} and any(re.fullmatch(rf"{NAME}(==[\w.]+|@latest)?", a) for a in args)
 
 
 def _backup(path: Path) -> None:

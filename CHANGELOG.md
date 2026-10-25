@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-26
+
+### Added
+- Status file `~/.nexus/status/agymail.json` (`product`, `version`, `latest`, `state`, `checked_at`, `message`),
+  written by the server at startup in the background; `latest` is read from PyPI at most once a day.
+  `NEXUS_AGYMAIL_UPDATE_CHECK=0` turns the request off.
+
+### Changed
+- `setup` declares `uvx --python 3.14 nexus-agymail@latest` to Antigravity, so every start of Antigravity runs the
+  latest published version. A pinned entry (`==x`) written by an earlier version is replaced.
+
 ## [0.8.0] - 2026-10-25
 
 First public release.

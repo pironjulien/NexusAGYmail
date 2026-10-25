@@ -3,7 +3,7 @@
   "name": "io.github.pironjulien/nexus-agymail",
   "title": "NexusAGYmail",
   "description": "Gmail for AI agents through the official API: Google's tool names, sends only after the user's yes.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "websiteUrl": "https://julienpiron.fr/nexusagymail/",
   "repository": {
     "url": "https://github.com/pironjulien/NexusAGYmail",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "nexus-agymail",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

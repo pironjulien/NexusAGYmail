@@ -152,12 +152,14 @@ filters or signature, another Google account).
 | `NEXUS_AGYMAIL_CLIENT_SECRET` | Path of the OAuth client JSON, instead of the copy made by `auth --client-secret` |
 | `NEXUS_AGYMAIL_PROTECTED` | Extra folders whose files are never attached (separated by `;` on Windows, `:` elsewhere) |
 | `NEXUS_AGYMAIL_ACCOUNT` | Address shown by `auth_status` when the token does not carry it |
+| `NEXUS_AGYMAIL_UPDATE_CHECK` | `0` turns off the daily check of the latest version on PyPI |
 
 ## Privacy
 
 NexusAGYmail runs on your machine. It has no account of its own, no telemetry, no analytics and no relay: its only
 network requests go to Google (`gmail.googleapis.com`, `oauth2.googleapis.com`, and `accounts.google.com` in your
-browser when you sign in), with your own OAuth client.
+browser when you sign in), with your own OAuth client, plus at most one request a day to `pypi.org` to read the
+latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
 
 - **What it reads**: the emails, threads, drafts, labels and attachments the agent asks for, only when it calls the
   matching tool; local files only when the agent attaches them to a draft.
@@ -165,7 +167,8 @@ browser when you sign in), with your own OAuth client.
   its own privacy policy. Drafts and sent emails go to Gmail. NexusAGYmail sends nothing anywhere else.
 - **What it stores**, under `~/.nexus/nexus-agymail/` (or `NEXUS_AGYMAIL_HOME`): the refresh token (`token.bin`,
   encrypted with DPAPI on Windows, a `0600` file elsewhere), its lock file, the copy of your OAuth client
-  (`client_secret.json`), and backups of the Antigravity config files `setup` edits (`backups/`). Attachments you ask
+  (`client_secret.json`), and backups of the Antigravity config files `setup` edits (`backups/`). The server also
+  writes `~/.nexus/status/agymail.json` (installed and latest version, last check time) for the Nexus app. Attachments you ask
   it to save go to `~/Downloads/NexusAGYmail` (or the folder given). In memory only, for the life of the server: the
   pending send accords and the addresses seen in emails read (for the `provenance` warning). No email is written to
   disk unless saved as an attachment; no log of emails is kept.

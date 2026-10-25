@@ -29,6 +29,7 @@ def test_initialize_and_list_tools(tmp_path):
         "HOME": str(tmp_path),
         "USERPROFILE": str(tmp_path),
         "NEXUS_AGYMAIL_HOME": str(tmp_path / "state"),
+        "NEXUS_AGYMAIL_UPDATE_CHECK": "0",  # pas de requête à PyPI dans le test
     }
     params = StdioServerParameters(command=sys.executable, args=["-B", "-m", "nexus_agymail"], env=env)
 
@@ -62,5 +63,7 @@ def test_initialize_and_list_tools(tmp_path):
             status = await session.call_tool("auth_status", {})
             text = status.content[0].text  # type: ignore[union-attr]
             assert json.loads(text)["present"] is False
+        state = json.loads((tmp_path / ".nexus" / "status" / "agymail.json").read_text(encoding="utf-8"))
+        assert state["product"] == "agymail" and state["version"] == __version__ and state["state"] == "idle"
 
     anyio.run(check)

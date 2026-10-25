@@ -26,7 +26,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
-from . import __version__, auth, client, fichiers, garde_fous, mime
+from . import __version__, auth, client, fichiers, garde_fous, mime, status
 
 DEFAULT_MAX_CHARS = 8090  # ≈ 5 000 × nombre d'or : un mail entier ou presque, sans noyer le contexte
 DEFAULT_THREAD_MAX_CHARS = 16180  # ≈ 10 000 × nombre d'or, partagés entre les messages du fil
@@ -808,8 +808,9 @@ def untrash_thread(threadId: list[str] | str) -> str:
 
 
 def serve() -> None:
-    """Vérifie le jeton (portées) puis sert en stdio."""
+    """Vérifie le jeton (portées), écrit l'état pour l'appli Nexus (en arrière-plan), puis sert en stdio."""
     startup_check()
+    status.report_in_background()
     mcp.run("stdio")
 
 
