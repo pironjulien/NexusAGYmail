@@ -1,4 +1,4 @@
-# Python et caches (normalement hors dépôt : -B, PYTHONDONTWRITEBYTECODE, caches sous ~\.nexus\nexus-agymail)
+# Python et caches (normalement hors dépôt : -B, PYTHONDONTWRITEBYTECODE, caches sous ~/.nexus/nexus-agymail)
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -8,7 +8,7 @@ __pycache__/
 dist/
 build/
 
-# Secrets : ne vivent jamais dans le dépôt (~\.nexus\nexus-agymail ou NexusSecure)
+# Secrets : ne vivent jamais dans le dépôt (dossier d'état ~/.nexus/nexus-agymail)
 token.json
 token.bin
 token.lock

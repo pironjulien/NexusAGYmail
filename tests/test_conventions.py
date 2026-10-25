@@ -16,7 +16,7 @@ PLUGIN = ROOT / "src" / "nexus_agymail" / "plugin"
 SKILL = PLUGIN / "skills" / "nexus-agymail" / "SKILL.md"
 INSTALL = ROOT / "install.ps1"  # installeur privé du poste : absent de la copie publique
 SOURCES = [*ROOT.glob("src/**/*.py"), ROOT / "README.md", ROOT / "pyproject.toml", SKILL]
-PERSONAL = ("julienpiron.fr@", "julienpironfr@", "nexussecure", "onedrive")  # adresses du poste, coffre, synchro
+PERSONAL = ("@gmail.com", "nexussecure", "onedrive")  # aucune vraie adresse, ni coffre ni dossier synchronisé
 
 
 def test_aucune_donnee_personnelle_dans_ce_que_lit_un_tiers():

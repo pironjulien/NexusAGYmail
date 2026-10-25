@@ -45,7 +45,7 @@ def test_initialize_and_list_tools(tmp_path):
             # Ce que lit tout client tiers : en anglais, neutre (« the user »), sous la limite de 2048 caractères.
             assert init.instructions and len(init.instructions) <= 2048
             seen = init.instructions + "".join(tool.model_dump_json() for tool in listed)
-            for personal in ("Julien", "NexusSecure", "OneDrive", "politique commune", "brouillon"):
+            for personal in ("Julien", "@gmail.com", "politique commune", "brouillon"):
                 assert personal not in seen, personal
             tools = {tool.name: tool for tool in listed}
             assert set(tools) == TOOLS
