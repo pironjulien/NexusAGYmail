@@ -13,8 +13,11 @@ from fake_gmail import NEW_SCOPES, fake_token, write_legacy_token
 from nexus_agymail import auth, server
 
 # Modules nouveaux importés dans chaque test : sur l'ancien code, chaque test échoue seul (pas d'arrêt de collecte).
+WINDOWS = pytest.mark.skipif(sys.platform != "win32", reason="DPAPI et droits NTFS : Windows seulement")
+POSIX = pytest.mark.skipif(sys.platform == "win32", reason="droits 0600 : hors Windows")
 
 
+@WINDOWS
 def test_migration_chiffre_puis_supprime_token_json(state_dir):
     from nexus_agymail import dpapi
 
@@ -43,6 +46,7 @@ def test_migration_garde_token_json_si_relecture_echoue(state_dir, monkeypatch):
     assert legacy.exists()
 
 
+@WINDOWS
 def test_droits_reserves_a_l_utilisateur(state_dir):
     from nexus_agymail.token_store import TokenStore
 
@@ -55,6 +59,17 @@ def test_droits_reserves_a_l_utilisateur(state_dir):
     assert len(aces) == 1, listing
     assert os.environ.get("USERNAME", "").lower() in aces[0].lower()
     assert "(I)" not in listing  # aucun droit hérité
+
+
+@POSIX
+def test_hors_windows_fichier_0600_lisible_par_l_utilisateur_seul(state_dir):
+    from nexus_agymail.token_store import TokenStore
+
+    store = TokenStore(state_dir)
+    store.save(fake_token(NEW_SCOPES))
+    assert store.path.stat().st_mode & 0o777 == 0o600
+    assert store.load() == fake_token(NEW_SCOPES)
+    assert "readable by your account only" in (store.describe() or "")
 
 
 def test_ecritures_concurrentes_atomiques(state_dir):
