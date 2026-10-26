@@ -2,8 +2,8 @@
 
   nexus-agymail                       serveur MCP stdio (ce que lancent les IA)
   nexus-agymail auth [--client-secret FICHIER] [--no-browser]
-                                      connexion Google (navigateur), jeton enregistré localement
-  nexus-agymail setup                 déclaration chez Antigravity (plugin), puis l'étape suivante affichée
+                                      connexion Google guidée (guide.py) : client OAuth créé pas à pas si absent
+  nexus-agymail setup                 déclaration chez Antigravity (plugin), puis l'assistant si pas connecté
   nexus-agymail status                état du jeton (JSON), sans réseau ni secret affiché
 
 Pack Nexus (NEXUS_PACK=1, setup) : aucune question, aucune attente, aucune fenêtre ; code 0 si aucune déclaration
@@ -15,11 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
-import sys
-from pathlib import Path
 
-from . import __version__, auth, register
+from . import __version__, auth, guide, register
 
 USAGE = "nexus-agymail [auth|setup|status] (no argument: run the MCP server over stdio)"
 
@@ -32,46 +29,8 @@ def _short(result: str) -> str:
     return result
 
 
-def _client_secret(path_text: str) -> Path:
-    """Copie un client OAuth Desktop téléchargé dans le dossier d'état, après une vérification de forme."""
-    source = Path(path_text).expanduser()
-    try:
-        data = json.loads(source.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError) as exc:
-        raise SystemExit(f"--client-secret: cannot read {source} ({exc})") from exc
-    if not isinstance(data, dict) or "installed" not in data:
-        raise SystemExit(
-            f"--client-secret: {source.name} is not a Desktop app OAuth client (no 'installed' section); create one of "
-            "type Desktop app in Google Cloud Console > APIs & Services > Credentials"
-        )
-    target = auth.client_secret_target()
-    if source.resolve() != target.resolve():
-        shutil.copyfile(source, target)
-        try:
-            os.chmod(target, 0o600)
-        except OSError:
-            pass
-    return target
-
-
 def cmd_auth(args: argparse.Namespace) -> int:
-    if args.client_secret:
-        print(f"OAuth client saved: {_client_secret(args.client_secret)}")
-    try:
-        result = auth.authenticate_interactive(open_browser=not args.no_browser)
-    except FileNotFoundError as exc:
-        print(exc, file=sys.stderr)
-        return 1
-    scopes = result["scopes"]
-    print(f"Signed in as {result['account'] or 'the Google account you chose'}; token saved in {result['path']}.")
-    if scopes.get("reauth_required"):
-        print(f"Scopes: {scopes.get('message') or scopes}", file=sys.stderr)
-        return 1
-    if result.get("warning"):
-        print(result["warning"], file=sys.stderr)
-        return 1
-    print("Restart your AI app (Antigravity) to use Gmail.")
-    return 0
+    return guide.run(client_secret=args.client_secret or "", open_browser=not args.no_browser)
 
 
 def cmd_setup(_args: argparse.Namespace) -> int:
@@ -90,10 +49,13 @@ def cmd_setup(_args: argparse.Namespace) -> int:
         print(f"Gmail: signed in ({report.get('account') or 'account recorded in the token'}).")
     else:
         print(
-            f"Gmail: not signed in yet. Next step: {auth.REAUTH_HINT} --client-secret <client_secret_....json> "
-            "(README: create your own Google OAuth client first)."
+            f"Gmail: not signed in yet. Next step: {auth.REAUTH_HINT} (guided: it opens each Google page, then checks)."
         )
     failed = any(r.startswith("failed") for r in results.values())
+    if not signed_in and guide.interactive():
+        answer = input("Connect Gmail now (guided, about 5 minutes)? [Y/n] ").strip().lower()
+        if answer in ("", "y", "yes", "o", "oui"):
+            return guide.run() or (1 if failed else 0)
     if pack:  # ligne de synthèse lue par le pack Nexus (get-nexus.ps1)
         fields = [f"{client}={_short(state)}" for client, state in results.items()]
         fields.append(f"sign-in={'done' if signed_in else 'to do'}")

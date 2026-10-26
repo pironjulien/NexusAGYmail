@@ -260,6 +260,9 @@ def authenticate_interactive(port: int = 0, open_browser: bool = True) -> dict[s
         success_message="NexusAGYmail is signed in. You can close this tab.",
     )
     info = json.loads(creds.to_json())
+    # Réponse brute de Google : un refresh_token_expires_in (7 jours) trahit une appli restée en mode Test.
+    raw_token = getattr(getattr(flow, "oauth2session", None), "token", None) or {}
+    expires_in = raw_token.get("refresh_token_expires_in") if isinstance(raw_token, dict) else None
     # Les portées réellement accordées (consentement granulaire), pas celles demandées.
     granted = getattr(creds, "granted_scopes", None) or creds.scopes or []
     info["scopes"] = sorted(granted)
@@ -267,9 +270,18 @@ def authenticate_interactive(port: int = 0, open_browser: bool = True) -> dict[s
         service = build("gmail", "v1", credentials=creds, cache_discovery=False)
         info["account"] = service.users().getProfile(userId="me").execute(num_retries=3).get("emailAddress", "")
     except Exception as exc:  # l'adresse est un confort : le jeton reste bon sans elle
+        profile_error = str(exc)
         print(f"Account address not read: {exc}", file=sys.stderr)
+    else:
+        profile_error = ""
     store.save(info)
     result: dict[str, Any] = {"account": info.get("account", ""), "scopes": scope_report(info), "path": str(store.path)}
+    if expires_in is not None:
+        result["refresh_token_expires_in"] = expires_in
+        result["testing_mode"] = _short_lived(expires_in)
+    if profile_error:
+        result["profile_error"] = profile_error
+        result["gmail_api_disabled"] = any(m in profile_error for m in API_DISABLED_MARKERS)
     if old and scope_report(old)["excess"] and old.get("refresh_token") != info.get("refresh_token"):
         # Sans révocation, l'ancienne autorisation (portées en trop) resterait valable chez Google.
         revoked = revoke(str(old["refresh_token"]))
@@ -285,6 +297,17 @@ def authenticate_interactive(port: int = 0, open_browser: bool = True) -> dict[s
                 "(the old one is gone, the second sign-in gives a clean token)"
             )
     return result
+
+
+API_DISABLED_MARKERS = ("accessNotConfigured", "SERVICE_DISABLED", "has not been used in project", "is disabled")
+LONG_LIVED_S = 30 * 24 * 3600  # au-delà, le jeton n'est pas celui du mode Test (7 jours)
+
+
+def _short_lived(expires_in: Any) -> bool:
+    try:
+        return 0 < int(expires_in) < LONG_LIVED_S
+    except TypeError, ValueError:
+        return False
 
 
 def _refresh_works(info: dict[str, Any]) -> bool:

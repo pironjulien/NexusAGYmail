@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-26
+
+### Added
+- Guided first sign-in, started by `setup` (interactive, when there is no token) or by `auth`: it opens each Google
+  Cloud console page at the right place (project, Gmail API, consent screen, publishing, Desktop client), says what
+  to click, and finds the downloaded `client_secret_….json` by itself (Ctrl+C to type a path). No shared OAuth
+  client.
+- Checks after signing in: Gmail API turned off, or app left in Testing (Google returns a 7-day
+  `refresh_token_expires_in`): the page that fixes it opens, then a new sign-in; after three failures, a pointer to
+  Google's official Gmail MCP server.
+- README: two-step Quick start, and when to prefer Google's own server or built-in connectors.
+
+### Changed
+- `auth`: a client that is not a Desktop app is refused with a message (exit code 1).
+
 ## [0.8.1] - 2026-10-26
 
 ### Added

@@ -23,7 +23,7 @@ def test_setup_declare_le_plugin_antigravity(gemini, capsys):
     assert server["args"] == ["--python", "3.14", "nexus-agymail@latest"]  # dernière version à chaque démarrage
     assert (plugin / "skills" / "nexus-agymail" / "SKILL.md").is_file() and (plugin / "plugin.json").is_file()
     out = capsys.readouterr().out
-    assert "Antigravity: plugin" in out and "not signed in yet" in out and "--client-secret" in out
+    assert "Antigravity: plugin" in out and "not signed in yet" in out and "nexus-agymail auth" in out
     assert "NEXUS_PACK_RESULT" not in out
     assert cli.main(["setup"]) == 0
     assert "plugin (already installed)" in capsys.readouterr().out
@@ -64,11 +64,11 @@ def test_setup_sans_antigravity(isolated_home, capsys, monkeypatch):
     assert "Antigravity not found" in out and out.strip().endswith("NEXUS_PACK_RESULT sign-in=to do")
 
 
-def test_auth_refuse_un_client_qui_n_est_pas_de_bureau(tmp_path):
+def test_auth_refuse_un_client_qui_n_est_pas_de_bureau(tmp_path, state_dir, capsys):
     web = tmp_path / "client_secret_web.json"
     web.write_text(json.dumps({"web": {"client_id": "x"}}), encoding="utf-8")
-    with pytest.raises(SystemExit, match="Desktop app"):
-        cli.main(["auth", "--client-secret", str(web)])
+    assert cli.main(["auth", "--client-secret", str(web)]) == 1
+    assert "Desktop app" in capsys.readouterr().out
 
 
 def test_auth_copie_le_client_puis_lance_la_connexion(tmp_path, state_dir, monkeypatch):

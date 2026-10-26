@@ -28,32 +28,36 @@ Part of the Nexus family: [NexusWindows](https://julienpiron.fr/nexuswindows/),
 
 ## Quick start
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Google account. About 10 minutes, once.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Google account. About 5 minutes, once.
 
-1. **Create your own Google OAuth client** (Gmail scopes are restricted, so every user brings their own client:
-   your mail never goes through anyone else's app).
-   1. In [Google Cloud Console](https://console.cloud.google.com/), create a project (any name).
-   2. [Enable the Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com) for it.
-   3. [Google Auth Platform > Branding](https://console.cloud.google.com/auth/branding): app name, your address;
-      **Audience**: External, then add your Gmail address as a test user, and click **Publish app** (in *Testing*,
-      Google expires the sign-in every 7 days; a published app for your own use needs no verification, Google only shows
-      a "Google hasn't verified this app" screen: *Advanced > Go to … (unsafe)*).
-   4. [Clients](https://console.cloud.google.com/auth/clients) > **Create client** > type **Desktop app** >
-      **Download JSON** (`client_secret_….json`).
-2. **Sign in** (opens your browser on Google's consent page):
+1. **Run the guided setup**:
    ```bash
-   uvx --python 3.14 nexus-agymail auth --client-secret ~/Downloads/client_secret_XXXX.json
+   uvx --python 3.14 nexus-agymail setup
    ```
-3. **Connect your AI app**, then restart it:
-   - **Antigravity**: `uvx --python 3.14 nexus-agymail setup` (adds the `nexus-agymail` plugin: server and skill).
-   - **Any other MCP client**: add the server by hand.
+   It adds the `nexus-agymail` plugin to Antigravity, then offers to connect Gmail. Gmail scopes are restricted, so
+   every user creates their own free OAuth client in their own Google Cloud project: your mail never goes through
+   anyone else's app. The assistant opens each Google page in your browser at the right place and says what to
+   click:
+   1. create a project (name it NexusAGYmail);
+   2. turn on the Gmail API;
+   3. the consent screen (*Get started*, *External*), then **Publish app** (in *Testing*, Google signs you out every
+      7 days);
+   4. a client of type **Desktop app**, then **Download JSON**: the assistant finds the file in your Downloads folder
+      by itself;
+   5. sign in. Google shows "Google hasn't verified this app": it is your own app, click *Advanced > Go to
+      NexusAGYmail (unsafe)*.
+
+   Then it checks what can be checked: the Gmail API answers, and the app is really published (Google returns a
+   7-day sign-in for apps left in *Testing*); if not, it opens the page that fixes it and signs in again.
+2. **Restart Antigravity.** Another MCP client: add the server by hand (below), then sign in with
+   `uvx --python 3.14 nexus-agymail auth` (same assistant).
 
    <details><summary>JSON (Claude Desktop, Cursor, VS Code, Antigravity by hand)</summary>
 
    ```json
    {
      "mcpServers": {
-       "nexus-agymail": { "command": "uvx", "args": ["--python", "3.14", "nexus-agymail"] }
+       "nexus-agymail": { "command": "uvx", "args": ["--python", "3.14", "nexus-agymail@latest"] }
      }
    }
    ```
@@ -63,7 +67,7 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
    ```toml
    [mcp_servers.nexus-agymail]
    command = "uvx"
-   args = ["--python", "3.14", "nexus-agymail"]
+   args = ["--python", "3.14", "nexus-agymail@latest"]
    startup_timeout_sec = 60
    ```
    </details>
@@ -71,7 +75,14 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
 Then ask, for example: *"Summarize my unread emails from this week"*, *"Archive the newsletters older than a
 month"*, *"Draft a reply to the last email from Alice saying I agree, and show it to me before sending"*.
 
-`uvx --python 3.14 nexus-agymail status` shows where the token is and which scopes it carries (no secret shown).
+Already have a Desktop app client JSON? `uvx --python 3.14 nexus-agymail auth --client-secret <file>` skips the
+console steps. `uvx --python 3.14 nexus-agymail status` shows where the token is and which scopes it carries (no
+secret shown).
+
+**Rather not create a client?** Google's own [Gmail MCP server](https://developers.google.com/workspace/gmail/api/reference/mcp)
+runs on Google's side (same tool names) but is a developer preview: it needs the Google Workspace Developer Preview
+Program and a Google Cloud project as well, and it cannot send. Claude and ChatGPT also have built-in Gmail
+connectors. NexusAGYmail exists for clients without one, such as Antigravity, and for confirmed sending.
 
 ## How it works
 
@@ -178,8 +189,8 @@ latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
 
 ## Known limitations
 
-- Each user creates their own Google OAuth client (step 1). A shared public client would need Google's restricted
-  scope verification and a security assessment.
+- Each user creates their own Google OAuth client (guided by `setup`). A shared public client would need Google's
+  restricted scope verification and a security assessment.
 - Plain-text bodies only when writing: `create_draft` and `update_draft` do not write HTML; `update_draft` replaces
   the HTML part of a draft written in Gmail with the plain text.
 - No Gmail settings (filters, signature, forwarding, vacation replies): use the Gmail web app.
