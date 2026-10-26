@@ -76,7 +76,7 @@ def test_auth_copie_le_client_puis_lance_la_connexion(tmp_path, state_dir, monke
     desktop.write_text(json.dumps({"installed": {"client_id": "x", "client_secret": "y"}}), encoding="utf-8")
     calls = []
 
-    def fake_flow(open_browser=True):
+    def fake_flow(open_browser=True, login_hint=""):
         calls.append(open_browser)
         scopes = {"reauth_required": False}
         return {"account": "alice@example.com", "scopes": scopes, "path": str(state_dir / "token.bin")}

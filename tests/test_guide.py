@@ -47,7 +47,7 @@ def flows(monkeypatch, state_dir):
     results: list[dict] = []
     calls: list[bool] = []
 
-    def fake(open_browser=True):
+    def fake(open_browser=True, login_hint=""):
         calls.append(open_browser)
         return results.pop(0)
 
@@ -132,3 +132,35 @@ def test_mode_test_detecte_par_la_duree_du_jeton():
 def test_jamais_interactif_dans_le_pack(monkeypatch):
     monkeypatch.setenv("NEXUS_PACK", "1")
     assert guide.interactive() is False
+
+
+def test_compte_choisi_pages_et_connexion_sur_ce_compte(isolated_home, state_dir, monkeypatch):
+    hints: list[str] = []
+
+    def fake(open_browser=True, login_hint=""):
+        hints.append(login_hint)
+        return dict(OK)
+
+    monkeypatch.setattr(auth, "authenticate_interactive", fake)
+    downloads = isolated_home / "Downloads"
+    io = FakeIo(lambda url: drop_client(downloads) if url.startswith(guide.CLIENT_CREATE) else None)
+    io.ask = lambda prompt: "bob@example.com" if "Gmail address" in prompt else ""
+    assert guide.run(io) == 0
+    assert io.opened and all(url.endswith("authuser=bob@example.com") for url in io.opened)
+    assert hints == ["bob@example.com"]
+    assert (
+        guide.HOME_PAGE.startswith("https://github.com/")
+        and guide.HOME_PAGE in io.text() in io.text()
+        and "403" in io.text()
+    )
+
+
+def test_ctrl_c_sortie_propre_sans_pile(monkeypatch, capsys):
+    from nexus_agymail import cli
+
+    def interrupted(**_kw):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(guide, "run", interrupted)
+    assert cli.main(["auth"]) == 130
+    assert "Cancelled." in capsys.readouterr().err

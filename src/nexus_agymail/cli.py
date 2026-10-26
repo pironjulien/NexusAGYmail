@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 
 from . import __version__, auth, guide, register
 
@@ -85,4 +86,8 @@ def main(argv: list[str]) -> int:
     sub.add_parser("setup", help="declare the server to Antigravity (plugin)").set_defaults(run=cmd_setup)
     sub.add_parser("status", help="token status as JSON (no network, no secret shown)").set_defaults(run=cmd_status)
     args = parser.parse_args(argv)
-    return int(args.run(args))
+    try:
+        return int(args.run(args))
+    except KeyboardInterrupt:  # Ctrl+C pendant une question ou l'attente de Google : sortie propre, sans pile
+        print("\nCancelled.", file=sys.stderr)
+        return 130

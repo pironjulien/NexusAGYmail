@@ -235,7 +235,7 @@ def revoke(refresh_token: str) -> bool:
     return response.status in (200, 400)
 
 
-def authenticate_interactive(port: int = 0, open_browser: bool = True) -> dict[str, Any]:
+def authenticate_interactive(port: int = 0, open_browser: bool = True, login_hint: str = "") -> dict[str, Any]:
     """Flux OAuth navigateur (port local), puis jeton chiffré.
 
     Un ancien jeton aux portées en trop n'est révoqué qu'APRÈS l'obtention et l'enregistrement du nouveau : un flux
@@ -250,6 +250,7 @@ def authenticate_interactive(port: int = 0, open_browser: bool = True) -> dict[s
     except TokenError:
         old = None
 
+    hint: dict[str, Any] = {"login_hint": login_hint} if login_hint else {}  # compte proposé d'office par Google
     flow = InstalledAppFlow.from_client_secrets_file(str(get_client_secret_path()), list(SCOPES))
     creds = flow.run_local_server(
         port=port,
@@ -258,6 +259,7 @@ def authenticate_interactive(port: int = 0, open_browser: bool = True) -> dict[s
         open_browser=open_browser,
         authorization_prompt_message="Sign in to Google in your browser (if it did not open, visit this URL):\n{url}",
         success_message="NexusAGYmail is signed in. You can close this tab.",
+        **hint,
     )
     info = json.loads(creds.to_json())
     # Réponse brute de Google : un refresh_token_expires_in (7 jours) trahit une appli restée en mode Test.

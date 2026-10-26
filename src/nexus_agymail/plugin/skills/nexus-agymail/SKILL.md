@@ -3,7 +3,7 @@ name: nexus-agymail
 description: The user's Gmail (signed-in account) through the nexus-agymail MCP server - search, read, attachments, drafts, labels, trash, send a draft after their yes. Also says which tool to pick for Gmail settings, another Google account, Calendar and Drive.
 ---
 
-# Gmail: which tool for what (nexus-agymail 0.10.0)
+# Gmail: which tool for what (nexus-agymail 0.10.1)
 
 ## 1. Pick the tool
 

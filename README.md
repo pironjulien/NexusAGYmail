@@ -37,13 +37,15 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
    It adds the `nexus-agymail` plugin to Antigravity, then offers to connect Gmail. Gmail scopes are restricted, so
    every user creates their own free OAuth client in their own Google Cloud project: your mail never goes through
    anyone else's app. The assistant opens each Google page in your browser at the right place and says what to
-   click:
+   click (it first asks which Gmail address to connect, so the pages open on that account):
    1. create a project (name it NexusAGYmail);
    2. turn on the Gmail API;
-   3. the consent screen (*Get started*, *External*), then **Publish app** (in *Testing*, Google signs you out every
-      7 days);
-   4. a client of type **Desktop app**, then **Download JSON**: the assistant finds the file in your Downloads folder
-      by itself;
+   3. the consent screen (*Get started*, *External*); on *Branding*, a home page, a privacy policy link and an
+      authorized domain (the assistant gives this repository, its [Privacy](#privacy) section and `github.com`:
+      Google requires them before publishing); then **Publish app** (unpublished, Google blocks the sign-in with
+      *Error 403: access_denied*);
+   4. a client of type **Desktop app** (leave *Use this client for an AI-powered agent* unchecked), then **Download
+      JSON**: the assistant finds the file in your Downloads folder by itself;
    5. sign in. Google shows "Google hasn't verified this app": it is your own app, click *Advanced > Go to
       NexusAGYmail (unsafe)*.
 

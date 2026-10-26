@@ -15,6 +15,7 @@ import sys
 import time
 import webbrowser
 from collections.abc import Callable
+from importlib.metadata import PackageNotFoundError, metadata
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,24 @@ BRANDING = f"{CONSOLE}/auth/branding"
 AUDIENCE = f"{CONSOLE}/auth/audience"
 CLIENT_CREATE = f"{CONSOLE}/auth/clients/create"
 FALLBACK = "https://developers.google.com/workspace/gmail/api/reference/mcp"
+
+
+# Pages publiques que Google exige sur l'écran de consentement avant de laisser publier l'appli (essai du 26/10).
+def _repository() -> str:
+    """Adresse du dépôt public, lue dans les métadonnées du paquet (Project-URL « Repository »)."""
+    try:
+        entries = metadata("nexus-agymail").get_all("Project-URL") or []
+    except PackageNotFoundError:
+        return ""
+    for entry in entries:
+        label, _, url = entry.partition(",")
+        if label.strip() == "Repository":
+            return url.strip()
+    return ""
+
+
+HOME_PAGE = _repository() or "the project's GitHub page"
+PRIVACY_PAGE = f"{HOME_PAGE}#privacy" if HOME_PAGE.startswith("https://") else "its Privacy section"
 WAIT_S = 900  # attente du JSON téléchargé : 15 minutes
 
 
@@ -44,10 +63,13 @@ def interactive() -> bool:
     return os.environ.get("NEXUS_PACK") != "1" and sys.stdin.isatty() and sys.stdout.isatty()
 
 
-def with_project(url: str, project: str) -> str:
-    if not project:
-        return url
-    return f"{url}{'&' if '?' in url else '?'}project={project}"
+def _param(url: str, name: str, value: str) -> str:
+    return f"{url}{'&' if '?' in url else '?'}{name}={value}" if value else url
+
+
+def with_project(url: str, project: str, account: str = "") -> str:
+    """Page de la console sur le bon projet et le bon compte Google (sinon : compte par défaut du navigateur)."""
+    return _param(_param(url, "project", project), "authuser", account)
 
 
 def downloads() -> Path:
@@ -113,7 +135,8 @@ def wait_for_client(io: Io, since: float, timeout: float = WAIT_S) -> Path | Non
     return None
 
 
-def _step(io: Io, number: int, title: str, url: str, lines: list[str]) -> None:
+def _step(io: Io, number: int, title: str, url: str, lines: list[str], account: str = "") -> None:
+    url = with_project(url, "", account)
     io.say(f"\n{number}/5  {title}")
     io.open(url)
     io.say(f"   Opened in your browser: {url}")
@@ -125,14 +148,27 @@ def _pause(io: Io) -> None:
     io.ask("   Press Enter when it is done... ")
 
 
-def create_client(io: Io) -> tuple[Path, str] | None:
+def ask_account(io: Io) -> str:
+    """Compte Google à utiliser : les pages s'ouvrent sur lui, pas sur le compte par défaut du navigateur."""
+    answer = io.ask("   Gmail address to connect (Enter = the account your browser opens by default): ").strip()
+    return answer if "@" in answer and " " not in answer else ""
+
+
+def create_client(io: Io, account: str = "") -> tuple[Path, str] | None:
     """Étapes 1 à 4 : projet, API Gmail, écran de consentement publié, client de bureau téléchargé."""
     started = time.time()
     io.say(
         "Gmail needs your own Google OAuth client (free, about 5 minutes, once): your mail never goes through anyone "
         "else's app. Each page opens in your browser; do what it says, then come back here."
     )
-    _step(io, 1, "Create a Google Cloud project", PROJECT_CREATE, ["Project name: NexusAGYmail", "Click Create."])
+    _step(
+        io,
+        1,
+        "Create a Google Cloud project",
+        PROJECT_CREATE,
+        ["Project name: NexusAGYmail", "Click Create, then select the new project (bell or project menu at the top)."],
+        account,
+    )
     _pause(io)
     _step(
         io,
@@ -140,6 +176,7 @@ def create_client(io: Io) -> tuple[Path, str] | None:
         "Turn on the Gmail API",
         ENABLE_GMAIL,
         ["Check that the project at the top is NexusAGYmail (switch to it if needed)", "Click Next, then Enable."],
+        account,
     )
     _pause(io)
     _step(
@@ -150,11 +187,20 @@ def create_client(io: Io) -> tuple[Path, str] | None:
         [
             "Click Get started. App name: NexusAGYmail; support email: yours. Next.",
             "Audience: External. Next. Contact email: yours. Next. Accept, then Create.",
+            "Google asks for public pages before publishing: open Branding again and fill in",
+            f"  App home page: {HOME_PAGE}",
+            f"  Privacy policy link: {PRIVACY_PAGE}",
+            "  Authorized domain: github.com (Add domain), then Save.",
         ],
+        account,
     )
     _pause(io)
-    io.open(AUDIENCE)
-    io.say(f"   Now on {AUDIENCE}: click Publish app, then Confirm (in Testing, Google signs you out every 7 days).")
+    audience = with_project(AUDIENCE, "", account)
+    io.open(audience)
+    io.say(
+        f"   Now on {audience}: click Publish app, then Confirm. Without it Google refuses the sign-in (Error 403: "
+        "access_denied); in Testing it would sign you out every 7 days."
+    )
     _pause(io)
     _step(
         io,
@@ -162,9 +208,11 @@ def create_client(io: Io) -> tuple[Path, str] | None:
         "Create the Desktop client",
         CLIENT_CREATE,
         [
-            "Application type: Desktop app; name: NexusAGYmail. Click Create.",
+            "Application type: Desktop app; name: NexusAGYmail. Leave 'Use this client for an AI-powered agent' "
+            "unchecked. Click Create.",
             "In the window that opens: Download JSON.",
         ],
+        account,
     )
     found = wait_for_client(io, started - 5)
     if found is None:
@@ -175,27 +223,28 @@ def create_client(io: Io) -> tuple[Path, str] | None:
     return target, project
 
 
-def sign_in(io: Io, project: str, open_browser: bool = True) -> int:
+def sign_in(io: Io, project: str, open_browser: bool = True, account: str = "") -> int:
     """Étape 5 : connexion, puis vérifications (API Gmail, mode Test) avec le geste qui corrige."""
     for _attempt in range(3):
         io.say("\n5/5  Sign in to Gmail")
         io.say(
             '   Google shows "Google hasn\'t verified this app": it is your own app. Click Advanced, then Go to '
-            "NexusAGYmail (unsafe), and allow."
+            "NexusAGYmail (unsafe), and allow. 'Access blocked' (Error 403: access_denied) means the app is not "
+            "published yet: publish it (step 3), then press Ctrl+C and run auth again."
         )
         try:
-            result = auth.authenticate_interactive(open_browser=open_browser)
+            result = auth.authenticate_interactive(open_browser=open_browser, login_hint=account)
         except FileNotFoundError as exc:
             io.say(str(exc))
             return 1
         if result.get("gmail_api_disabled"):
-            url = with_project(ENABLE_GMAIL, project)
+            url = with_project(ENABLE_GMAIL, project, account)
             io.open(url)
             io.say(f"   The Gmail API is not on for this project yet. Click Enable on {url}, wait a minute.")
             _pause(io)
             continue
         if result.get("testing_mode"):
-            url = with_project(AUDIENCE, project)
+            url = with_project(AUDIENCE, project, account)
             io.open(url)
             io.say(f"   The app is still in Testing (sign-in valid 7 days only). Click Publish app on {url}.")
             _pause(io)
@@ -215,6 +264,7 @@ def run(io: Io | None = None, client_secret: str = "", open_browser: bool = True
     """Assistant complet : client OAuth (créé, donné ou déjà là), puis connexion vérifiée."""
     io = io or Io()
     project = ""
+    account = ""
     if client_secret:
         try:
             _, project = save_client(Path(client_secret).expanduser())
@@ -225,10 +275,11 @@ def run(io: Io | None = None, client_secret: str = "", open_browser: bool = True
         try:
             existing = auth.get_client_secret_path()
         except FileNotFoundError:
-            created = create_client(io)
+            account = ask_account(io)
+            created = create_client(io, account)
             if created is None:
                 return 1
             project = created[1]
         else:
             project = str(((desktop_client(existing) or {}).get("installed") or {}).get("project_id") or "")
-    return sign_in(io, project, open_browser=open_browser)
+    return sign_in(io, project, open_browser=open_browser, account=account)

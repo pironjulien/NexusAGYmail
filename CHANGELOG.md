@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-26
+
+### Changed
+- Guided sign-in, after a real run on a Google account with no project: it first asks which Gmail address to
+  connect, then opens every console page on that account (`authuser`) and suggests it at sign-in (`login_hint`).
+- Step 3: Google now refuses to publish the app without a home page, privacy policy link and authorized domain; the
+  assistant gives the values (the project's GitHub page, the README's Privacy section, `github.com`).
+- An unpublished app is blocked at sign-in ("Error 403: access_denied"), not after 7 days: the assistant says so and
+  what to do.
+- Step 4: leave Google's new "Use this client for an AI-powered agent" box unchecked.
+- Ctrl+C during a question or the sign-in prints "Cancelled." (exit code 130) instead of a traceback.
+
 ## [0.10.0] - 2026-10-26
 
 ### Added
