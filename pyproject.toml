@@ -1,12 +1,12 @@
 [project]
 name = "nexus-agymail"
-version = "0.10.1"
-description = "Gmail MCP server for AI agents: official Gmail API, Google's tool names, sending only after the user's yes, no permanent deletion"
+version = "0.10.2"
+description = "Gmail for Google Antigravity (MCP server): official Gmail API, Google's tool names, sending only after the user's yes, no permanent deletion"
 authors = [{ name = "Julien Piron" }]
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.14"
-keywords = ["mcp", "mcp-server", "gmail", "email", "ai-agents", "antigravity", "claude", "codex", "prompt-injection"]
+keywords = ["mcp", "mcp-server", "gmail", "email", "ai-agents", "antigravity", "google-antigravity", "prompt-injection"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

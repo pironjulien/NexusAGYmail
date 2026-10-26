@@ -76,7 +76,9 @@ def main(argv: list[str]) -> int:
 
         server.serve()
         return 0
-    parser = argparse.ArgumentParser(prog="nexus-agymail", usage=USAGE, description="Gmail MCP server for AI agents.")
+    parser = argparse.ArgumentParser(
+        prog="nexus-agymail", usage=USAGE, description="Gmail MCP server for Google Antigravity."
+    )
     parser.add_argument("--version", action="version", version=f"nexus-agymail {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     p_auth = sub.add_parser("auth", help="sign in to Google in the browser and save the token locally")

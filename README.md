@@ -10,10 +10,10 @@
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue?logo=python&logoColor=white)](https://github.com/pironjulien/NexusAGYmail/blob/main/pyproject.toml)
 [![MCP](https://img.shields.io/badge/MCP-server-7ee2a8)](https://modelcontextprotocol.io)
 
-**Gmail for AI agents that is safe to leave alone.** One local MCP server, `nexus-agymail`, gives Antigravity (whose
-store has no Gmail connector) or any MCP client your Gmail through the official Gmail API: search, read, attachments,
-drafts, labels, a reversible trash, and sending a draft **only after your explicit yes for that exact draft**.
-Nothing is ever deleted for good.
+**Gmail for Google Antigravity, safe to leave alone.** Antigravity's store has no Gmail connector: one local MCP
+server, `nexus-agymail`, gives it your Gmail through the official Gmail API: search, read, attachments, drafts,
+labels, a reversible trash, and sending a draft **only after your explicit yes for that exact draft**. Nothing is
+ever deleted for good.
 
 - **Same tools as Google's official Gmail MCP server** (`search_threads`, `get_message`, `get_thread`,
   `create_draft`, `label_message`...), so an agent that knows one knows the other, without enrolling in the
@@ -51,10 +51,9 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
 
    Then it checks what can be checked: the Gmail API answers, and the app is really published (Google returns a
    7-day sign-in for apps left in *Testing*); if not, it opens the page that fixes it and signs in again.
-2. **Restart Antigravity.** Another MCP client: add the server by hand (below), then sign in with
-   `uvx --python 3.14 nexus-agymail auth` (same assistant).
+2. **Restart Antigravity.**
 
-   <details><summary>JSON (Claude Desktop, Cursor, VS Code, Antigravity by hand)</summary>
+   <details><summary>Antigravity by hand (mcp_config.json), if you skip setup</summary>
 
    ```json
    {
@@ -62,15 +61,6 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
        "nexus-agymail": { "command": "uvx", "args": ["--python", "3.14", "nexus-agymail@latest"] }
      }
    }
-   ```
-   </details>
-   <details><summary>Codex (~/.codex/config.toml)</summary>
-
-   ```toml
-   [mcp_servers.nexus-agymail]
-   command = "uvx"
-   args = ["--python", "3.14", "nexus-agymail@latest"]
-   startup_timeout_sec = 60
    ```
    </details>
 
@@ -83,14 +73,14 @@ secret shown).
 
 **Rather not create a client?** Google's own [Gmail MCP server](https://developers.google.com/workspace/gmail/api/reference/mcp)
 runs on Google's side (same tool names) but is a developer preview: it needs the Google Workspace Developer Preview
-Program and a Google Cloud project as well, and it cannot send. Claude and ChatGPT also have built-in Gmail
-connectors. NexusAGYmail exists for clients without one, such as Antigravity, and for confirmed sending.
+Program and a Google Cloud project as well, and it cannot send. NexusAGYmail exists because Antigravity has no
+Gmail connector of its own, and for confirmed sending.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A[AI app<br/>Antigravity, Claude, Codex, Cursor...] -- MCP stdio --> S[nexus-agymail<br/>on your machine]
+    A[Google Antigravity] -- MCP stdio --> S[nexus-agymail<br/>on your machine]
     S -- HTTPS, official Gmail API v1 --> G[(Gmail)]
     S -. token, encrypted .- T[~/.nexus/nexus-agymail]
     S -. attachments .- D[Downloads/NexusAGYmail]

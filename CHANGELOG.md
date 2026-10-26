@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-26
+
+### Changed
+- NexusAGYmail is presented as what it is: Gmail for Google Antigravity (README, PyPI and MCP registry
+  descriptions, command help); the Claude Desktop, Cursor and Codex configuration snippets are removed.
+
 ## [0.10.1] - 2026-10-26
 
 ### Changed
