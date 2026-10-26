@@ -735,6 +735,27 @@ def resolve_labels(svc: Any, names: list[str], create_missing: bool = False) -> 
     return [str(found[name]["id"]) for name in wanted], created
 
 
+def create_label(name: str, parents: bool = True, service: Any = None) -> dict[str, Any]:
+    """Crée un libellé (« Projets/2026 » : sous-libellé) ; parents=True crée aussi « Projets » s'il manque. Un libellé
+    qui existe déjà est rendu tel quel (rien de créé), un nom réservé ou vide est refusé."""
+    name = "/".join(part.strip() for part in (name or "").strip().split("/"))
+    if not name:
+        raise ValueError("displayName: empty label name")
+    parts = name.split("/")
+    names = ["/".join(parts[: i + 1]) for i in range(len(parts))] if parents else [name]
+    svc = service or get_service()
+    system = {
+        str(v).casefold()
+        for lab in list_labels(service=svc)
+        if lab["type"] == "system"
+        for v in (lab["id"], lab["name"])
+    }
+    if name.casefold() in system or name.upper() in RESERVED_LABELS:
+        raise LabelError(f"system label {name!r}: never created (see list_labels)")
+    ids, created = resolve_labels(svc, names, create_missing=True)
+    return {"id": ids[-1], "name": name, "created": created}
+
+
 def _ids(values: list[str] | None, field: str) -> list[str]:
     ids = list(dict.fromkeys(v.strip() for v in values or [] if v and v.strip()))
     bad = [i for i in ids if not _ID.fullmatch(i)]

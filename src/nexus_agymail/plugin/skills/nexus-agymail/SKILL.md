@@ -3,7 +3,7 @@ name: nexus-agymail
 description: The user's Gmail (signed-in account) through the nexus-agymail MCP server - search, read, attachments, drafts, labels, trash, send a draft after their yes. Also says which tool to pick for Gmail settings, another Google account, Calendar and Drive.
 ---
 
-# Gmail: which tool for what (nexus-agymail 0.9.0)
+# Gmail: which tool for what (nexus-agymail 0.10.0)
 
 ## 1. Pick the tool
 
@@ -29,8 +29,10 @@ Same names and parameters as Google's official Gmail MCP server, plus confirmed 
 | `get_thread(threadId)` | Read a thread, quotes removed |
 | `download_attachment(messageId, partId, directory)` | Save an attachment (`part_id` returned by `get_message`); returns the file path, to read afterwards, never to run |
 | `list_labels()` | Exact label IDs and names |
+| `create_label(displayName)` | New label (`A/B` = sub-label), only if the user wants it |
 | `create_draft(body, to, subject, cc, bcc, replyToMessageId, threadId, attachments)` | Prepare a draft (a reply: `replyToMessageId`; `attachments` = absolute paths, 25 MB) |
 | `list_drafts(pageSize, pageToken, query)` | List drafts |
+| `get_draft(draftId)` | Read a draft |
 | `update_draft(draftId, body, ..., attachments, removeAttachments)` | Rewrite a draft (empty fields = unchanged, attachments kept except `removeAttachments`) |
 | `label_message` / `unlabel_message(messageId, labelIds)`, `label_thread` / `unlabel_thread(threadId, labelIds)` | Tidy up: archive = remove `INBOX`, read = remove `UNREAD`, star = `STARRED`, important = `IMPORTANT`, or a label from `list_labels` (ID or name) |
 | `trash_message` / `trash_thread`, `untrash_message` / `untrash_thread` | Trash, reversible for 30 days |

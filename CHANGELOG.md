@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-26
+
+### Added
+- `get_draft(draftId, maxChars)`: reads one draft (recipients, subject, body as framed text, attachments, reply
+  header), never sends it.
+- `create_label(displayName, autoCreateParentLabels)`: creates a user label (`A/B` = nested, missing parents created
+  by default); an existing label is returned as it is, system labels are refused.
+
 ## [0.9.0] - 2026-10-26
 
 ### Added

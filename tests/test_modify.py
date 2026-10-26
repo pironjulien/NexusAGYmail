@@ -178,3 +178,25 @@ def test_jamais_de_suppression_definitive():
     names = {tool.name for tool in __import__("asyncio").run(server.mcp.list_tools())}
     assert not any("delete" in n or "empty" in n or "spam" in n for n in names)
     assert [n for n in names if "send" in n] == ["send_draft"]
+
+
+def test_create_label_avec_parents(gmail):
+    data = json.loads(server.create_label(displayName="Clients/Acme/2026"))
+    assert data["status"] == "success", data
+    assert [c["name"] for c in data["created"]] == ["Clients", "Clients/Acme/2026"]  # Clients/Acme existait
+    assert data["name"] == "Clients/Acme/2026" and data["id"] == data["created"][-1]["id"]
+
+
+def test_create_label_sans_parents_et_deja_present(gmail):
+    data = json.loads(server.create_label(displayName="Projets/Alpha", autoCreateParentLabels=False))
+    assert [c["name"] for c in data["created"]] == ["Projets/Alpha"]
+    again = json.loads(server.create_label(displayName="factures"))
+    assert again["status"] == "success" and again["created"] == [] and again["id"] == "Label_1"
+    assert gmail.kinds().count("label-create") == 1
+
+
+@pytest.mark.parametrize("name", ["", "  ", "Inbox", "TRASH", "a//b"])
+def test_create_label_refuse(gmail, name):
+    data = json.loads(server.create_label(displayName=name))
+    assert data["status"] == "error", data
+    assert "label-create" not in gmail.kinds()

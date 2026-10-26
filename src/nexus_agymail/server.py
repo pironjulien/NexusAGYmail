@@ -495,6 +495,24 @@ def list_labels() -> str:
     return _dump({"status": "success", "count": len(labels), "labels": _clean_tree(labels)})
 
 
+@mcp.tool(annotations=_tidy("Create a label"))
+def create_label(displayName: str, autoCreateParentLabels: bool = True) -> str:
+    """Create a user label; 'Projects/2026' is a sub-label of 'Projects'. A label that already exists is returned
+    as it is (nothing created). System labels (INBOX, SPAM, TRASH...) are refused.
+
+    Args:
+        displayName: label name; '/' separates nested labels.
+        autoCreateParentLabels: also create missing parent labels (default true).
+    """
+    if blocked := _modify_blocked():
+        return blocked
+    try:
+        label = client.create_label(name=displayName, parents=autoCreateParentLabels)
+    except Exception as exc:
+        return _error(exc)
+    return _dump({"status": "success", **_clean_tree(label)})
+
+
 @mcp.tool(annotations=_read("List drafts"))
 @_doc
 def list_drafts(pageSize: int = 20, pageToken: str = "", query: str = "") -> str:
@@ -530,6 +548,37 @@ def list_drafts(pageSize: int = 20, pageToken: str = "", query: str = "") -> str
             "warning": frame.note(),
         }
     )
+
+
+@mcp.tool(annotations=_read("Read a draft"))
+@_doc
+def get_draft(draftId: str, maxChars: int = DEFAULT_MAX_CHARS) -> str:
+    """Read one draft: recipients, subject, body as text (HTML converted), attachments listed, reply headers.
+
+    The body is cut at maxChars characters (the cut is reported). Reading never sends: send_draft does.
+    {untrusted}
+
+    Args:
+        draftId: draft ID (returned by create_draft or list_drafts).
+        maxChars: maximum body length, 200 to 100,000 (default 8,090).
+    """
+    try:
+        draft = client.get_draft(draft_id=draftId)
+    except Exception as exc:
+        return _error(exc)
+    frame = _Frame()
+    out = _render_draft(draft, frame)
+    text = draft.get("text") or ""
+    shown, cut = mime.truncate(text, _bound(maxChars))
+    out["body"] = frame.body(shown)
+    if cut:
+        out["body"] += f"\n[truncated: {len(shown)} of {len(text)} characters shown; raise maxChars]"
+        out["truncated"] = True
+        out["body_chars"] = len(text)
+    if draft.get("inReplyTo"):
+        out["inReplyTo"] = _clean(draft["inReplyTo"])
+    out["attachments"] = _attachments(draft.get("attachments") or [], frame)
+    return _dump({"status": "success", "draft": out, "warning": frame.note()})
 
 
 @mcp.tool(annotations=_draft("Update a draft"))

@@ -17,6 +17,7 @@ from nexus_agymail import __version__
 
 TOOLS = {
     "search_threads", "get_message", "get_thread", "list_labels", "create_draft", "list_drafts", "update_draft",
+    "get_draft", "create_label",
     "label_message", "unlabel_message", "label_thread", "unlabel_thread", "trash_message", "trash_thread",
     "untrash_message", "untrash_thread", "send_draft", "download_attachment", "auth_status",
 }  # fmt: skip

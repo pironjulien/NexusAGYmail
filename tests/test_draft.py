@@ -5,7 +5,7 @@ import json
 from email import message_from_bytes
 from email.policy import default
 
-from fake_gmail import plain_message
+from fake_gmail import plain_message, stored_draft
 
 from nexus_agymail import server
 
@@ -75,3 +75,27 @@ def test_adresses_invalides_refusees(gmail):
     data = json.loads(server.create_draft(body="x", to="ok@example.com", cc="faux", subject="s"))
     assert data["status"] == "error"
     assert gmail.drafts == []
+
+
+def test_lecture_d_un_brouillon(gmail):
+    stored_draft(
+        gmail, "d1", "Bonjour Bob,\nle devis est signé.", attachment="devis.pdf", In_Reply_To="<x@example.com>"
+    )
+    data = json.loads(server.get_draft(draftId="d1"))
+    assert data["status"] == "success", data
+    draft = data["draft"]
+    assert draft["id"] == "d1" and draft["threadId"] == "t-d1"
+    assert "bob@example.com" in draft["to"] and "Devis signé" in draft["subject"]
+    assert "le devis est signé." in draft["body"] and draft["body"].startswith("⟦mail:")
+    assert draft["inReplyTo"] == "<x@example.com>"
+    assert [a["type"] for a in draft["attachments"]] == ["application/pdf"]
+    assert "devis.pdf" in draft["attachments"][0]["name"]
+    assert gmail.sent == []  # lire n'envoie jamais
+
+
+def test_lecture_d_un_brouillon_tronquee_et_identifiant_invalide(gmail):
+    stored_draft(gmail, "d1", "x" * 500)
+    draft = json.loads(server.get_draft(draftId="d1", maxChars=200))["draft"]
+    assert draft["truncated"] is True and draft["body_chars"] >= 500
+    data = json.loads(server.get_draft(draftId="../d1"))
+    assert data["status"] == "error"
