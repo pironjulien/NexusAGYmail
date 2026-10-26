@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-10-26
+
+### Added
+- Nexus family icon: the NexusAGYmail envelope in the julienpiron.fr medallion, the same as on the site. It is the
+  logo of the Antigravity plugin (`plugin/logo.png`, 256 px, `logo` key of `plugin.json`, copied by `setup`) and
+  heads the README.
+
 ## [0.10.2] - 2026-10-26
 
 ### Changed

@@ -2,6 +2,8 @@
 
 <!-- mcp-name: io.github.pironjulien/nexus-agymail -->
 
+<img src="https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/src/nexus_agymail/plugin/logo.png" alt="NexusAGYmail icon" width="96">
+
 [![Release](https://img.shields.io/github/v/release/pironjulien/NexusAGYmail)](https://github.com/pironjulien/NexusAGYmail/releases)
 [![PyPI](https://img.shields.io/pypi/v/nexus-agymail)](https://pypi.org/project/nexus-agymail/)
 [![Tests](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml/badge.svg)](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml)
