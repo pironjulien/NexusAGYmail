@@ -50,7 +50,7 @@ def test_mise_a_jour_garde_fil_reponse_et_destinataires(gmail):
     assert parsed["In-Reply-To"] == "<orig@example.com>" and parsed["Subject"] == "Re: Devis"
     assert parsed["To"] == "Alice <alice@example.com>" and parsed["Cc"] == "c@example.com"
     assert parsed.get_content().strip() == "Version finale"
-    data = json.loads(server.update_draft(draftId=draft_id, body="Autre", to="bob@example.com", subject="Neuf"))
+    json.loads(server.update_draft(draftId=draft_id, body="Autre", to="bob@example.com", subject="Neuf"))
     _, parsed = raw_of(gmail)
     assert parsed["To"] == "bob@example.com" and parsed["Subject"] == "Neuf"
 

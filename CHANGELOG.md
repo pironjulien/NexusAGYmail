@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-10-27
+
+### Changed
+- CodeQL findings addressed: one import per module, reasons written in silent `except` blocks, unused variables
+  removed; the others dismissed on GitHub with their reason.
+- Shared guard policy (`garde_fous.py`): lowercase Cyrillic and Greek look-alikes (в к м н т β η) are detected again.
+
 ## [0.12.1] - 2026-10-27
 
 ### Added

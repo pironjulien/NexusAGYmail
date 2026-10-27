@@ -9,8 +9,8 @@ Hors Windows (macOS, Linux) : pas de DPAPI, le jeton est écrit en clair dans un
 from __future__ import annotations
 
 import ctypes
+import ctypes.wintypes as wintypes
 import os
-from ctypes import wintypes
 from pathlib import Path
 
 # Entropie propre à NexusAGYmail : un autre programme du même utilisateur qui appellerait CryptUnprotectData sans

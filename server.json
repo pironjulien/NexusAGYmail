@@ -3,7 +3,7 @@
   "name": "io.github.pironjulien/nexus-agymail",
   "title": "NexusAGYmail",
   "description": "Gmail for Google Antigravity via the official API; sends only after the user's yes.",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "websiteUrl": "https://julienpiron.fr/nexusagymail/",
   "icons": [
     {
@@ -30,7 +30,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "nexus-agymail",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

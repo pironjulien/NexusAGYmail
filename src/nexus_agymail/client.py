@@ -775,7 +775,7 @@ def _header_text(value: Any) -> str:
     try:
         text = str(make_header(decode_header(text)))
     except LookupError, UnicodeError, ValueError:
-        pass
+        pass  # mot encodé illisible (jeu de caractères inconnu, base64 cassé) : texte brut gardé tel quel, sans perte
     return re.sub(r"\r?\n[ \t]+", " ", text)
 
 

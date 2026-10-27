@@ -216,7 +216,7 @@ def test_transaction_verrouillee_entre_fils(state_dir, monkeypatch):
         try:  # sans verrou, les deux fils lisent le même état avant d'écrire : une mise à jour est perdue
             barrier.wait()
         except threading.BrokenBarrierError:
-            pass
+            pass  # le verrou garde l'autre fil hors de _read : l'attente expire, c'est le cas attendu
         return data
 
     monkeypatch.setattr(suivi, "_read", slow_read)

@@ -159,7 +159,7 @@ def test_mise_a_jour_garde_ajoute_et_retire(gmail, tmp_path):
     body = [b for kind, b in gmail.bodies if kind == "draft-update"][-1]
     names = [p.get_filename() for p in raw_of(body).iter_attachments()]
     assert names == ["devis-signe.pdf", "notes.txt"]
-    data = json.loads(server.update_draft(draftId="d1", body="Sans", removeAttachments=["devis-signe.pdf"]))
+    json.loads(server.update_draft(draftId="d1", body="Sans", removeAttachments=["devis-signe.pdf"]))
     body = [b for kind, b in gmail.bodies if kind == "draft-update"][-1]
     assert [p.get_filename() for p in raw_of(body).iter_attachments()] == ["notes.txt"]
     bad = json.loads(server.update_draft(draftId="d1", body="x", removeAttachments=["absent.pdf"]))

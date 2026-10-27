@@ -101,7 +101,7 @@ def save_client(source: Path) -> tuple[Path, str]:
         try:
             os.chmod(target, 0o600)
         except OSError:
-            pass
+            pass  # droits au mieux : le fichier reste dans le dossier d'état de l'utilisateur, la copie est faite
     return target, str(data["installed"].get("project_id") or "")
 
 
@@ -208,8 +208,10 @@ def create_client(io: Io, account: str = "") -> tuple[Path, str] | None:
         "Create the Desktop client",
         CLIENT_CREATE,
         [
-            "Application type: Desktop app; name: NexusAGYmail. Leave 'Use this client for an AI-powered agent' "
-            "unchecked. Click Create.",
+            (
+                "Application type: Desktop app; name: NexusAGYmail. Leave 'Use this client for an AI-powered agent' "
+                "unchecked. Click Create."
+            ),
             "In the window that opens: Download JSON.",
         ],
         account,
