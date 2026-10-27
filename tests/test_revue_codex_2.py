@@ -87,9 +87,10 @@ def test_echec_ambigu_non_retrouve_reste_averti(gmail: FakeGmail):
     assert again["previous_send"]["status"] == "unknown"
     assert "may already have been sent" in again["previous_send"]["warning"]
     assert "Nothing was sent" not in json.dumps(again)
-    # L'utilisateur, averti, dit oui à nouveau : l'envoi part, l'état est résolu.
+    # L'utilisateur, averti, dit oui à nouveau : l'envoi part et résout SA tentative ; la première, à l'issue
+    # toujours inconnue, reste signalée (0.11.5 : une trace par tentative).
     assert send(again["accord"])["sent"] is True
-    assert "previous_send" not in summary()
+    assert summary()["previous_send"]["status"] in ("unknown", "similar_in_sent")
 
 
 def test_issue_inconnue_survit_au_redemarrage(gmail: FakeGmail, monkeypatch: pytest.MonkeyPatch):

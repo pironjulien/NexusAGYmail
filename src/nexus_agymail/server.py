@@ -1083,7 +1083,7 @@ def send_draft(draftId: str, confirm: bool = False, accord: str = "") -> str:
     # Trace « tentative en cours » AVANT l'envoi : un arrêt brutal pendant messages.send laisse l'avertissement.
     # Impossible à écrire : rien ne part (l'incertitude ne pourrait plus être signalée).
     try:
-        new_trace = envois.mark_unknown(sha, draftId, int(time.time()))
+        attempt = envois.mark_attempt(sha, draftId, int(time.time()))  # une trace par tentative
     except Exception as exc:
         return _dump({"status": "error", "code": "state", "sent": False, "error": "could not record the send "
                       f"attempt locally (envois.json, {type(exc).__name__}): nothing was sent"})  # fmt: skip
@@ -1094,10 +1094,9 @@ def send_draft(draftId: str, confirm: bool = False, accord: str = "") -> str:
         result["message"] = UNKNOWN_SEND_NOTE  # la trace écrite avant l'envoi reste : jamais relancé
         return _dump(result)
     except Exception as exc:  # refus net de Gmail, ou avant la requête : rien n'est parti CETTE fois
-        if new_trace:  # une incertitude plus ancienne sur ces octets reste signalée
-            _record(envois.resolve, sha)
+        _record(envois.resolve, sha, attempt)  # seulement la sienne : les autres tentatives restent signalées
         return _error(exc)
-    warning = _record(envois.resolve, sha)
+    warning = _record(envois.resolve, sha, attempt)
     return _dump(
         {
             "status": "success",

@@ -140,8 +140,8 @@ filters or signature, another Google account).
   kept (delete it in Gmail if you like): `drafts.delete` is permanent, and an edit saved meanwhile would be lost. A
   change made after that last read can never go out in place of what was approved. A send is never retried after an
   ambiguous answer (5xx, timeout, network, unreadable 2xx), only after a 429: the outcome is reported as unknown.
-  The attempt is recorded before the request goes out, by the SHA-256 of the raw bytes (`envois.json`, nothing else
-  kept), so it survives a crash; the next summary or dialog of that same draft warns that it may already have been
+  Each attempt is recorded before the request goes out, with its own ID, under the SHA-256 of the raw bytes
+  (`envois.json`, nothing else kept), so it survives a crash and two simultaneous attempts never clear each other; the next summary or dialog of that same draft warns that it may already have been
   sent, after looking in Sent: "already sent" only when a sent message carries the draft's own Message-ID, otherwise
   at most "similar message, possible duplicate". A local storage failure never hides what Gmail did; if the attempt
   cannot be recorded, nothing is sent. No direct sending without a draft.

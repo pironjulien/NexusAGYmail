@@ -90,7 +90,7 @@ def test_issue_inconnue_rendue_meme_si_l_etat_ne_s_ecrit_pas(gmail: FakeGmail, m
     stored_draft(gmail, "d1", "Bonjour")
     token = summary()["accord"]
     calls: list[str] = []
-    real = envois.mark_unknown
+    real = envois.mark_attempt
 
     def second_fails(*args: Any, **kwargs: Any) -> None:
         calls.append("mark")
@@ -98,7 +98,7 @@ def test_issue_inconnue_rendue_meme_si_l_etat_ne_s_ecrit_pas(gmail: FakeGmail, m
             raise OSError("verrou indisponible")
         real(*args, **kwargs)
 
-    monkeypatch.setattr(envois, "mark_unknown", second_fails)
+    monkeypatch.setattr(envois, "mark_attempt", second_fails)
     gmail.lost_sends = 1
     data = send(token)
     assert data["status"] == "unknown" and data["code"] == "send_outcome_unknown", data
@@ -125,7 +125,7 @@ def test_trace_ecrite_avant_l_envoi_survit_a_un_arret(gmail: FakeGmail, monkeypa
 def test_trace_impossible_rien_ne_part(gmail: FakeGmail, monkeypatch: pytest.MonkeyPatch):
     stored_draft(gmail, "d1", "Bonjour")
     token = summary()["accord"]
-    monkeypatch.setattr(envois, "mark_unknown", broken)
+    monkeypatch.setattr(envois, "mark_attempt", broken)
     data = send(token)
     assert data["status"] == "error" and data["sent"] is False and "nothing was sent" in data["error"]
     assert gmail.sent == [] and "message-send" not in gmail.kinds()

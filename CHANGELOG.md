@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.5] - 2026-10-27
+
+### Security
+- Sending: one record PER ATTEMPT (unique ID) in `envois.json`, under the SHA-256 of the raw bytes. Two simultaneous
+  attempts on the same bytes (two valid accords) no longer clear each other: A's clear refusal only removes A's
+  record, and B's unknown outcome stays reported (`previous_send`). A confirmed send only removes its own record: an
+  older attempt with an unknown outcome stays reported. The previous format (one record per hash) is read as one
+  unknown attempt.
+
+### Known limitation
+- Matching by Message-ID: if a client reuses the same Message-ID for another message (a copied draft, a resend),
+  `found_in_sent` may point to that message. Not fixed (noted only).
+
 ## [0.11.4] - 2026-10-27
 
 ### Security
