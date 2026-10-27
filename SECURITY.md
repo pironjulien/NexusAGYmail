@@ -20,4 +20,10 @@ within a few days.
 - **Your OAuth client**: it lives in your own Google Cloud project; anyone with its JSON and your consent could use it.
   Keep it private, and revoke access in your Google account if it leaks.
 
+## Disclosure
+
+You will get a first answer within 3 days. A confirmed vulnerability is fixed in a new release, usually within 30
+days, then disclosed in a GitHub security advisory that credits the reporter unless they prefer otherwise. Please
+keep it private until that release is out.
+
 Only the latest release is supported.

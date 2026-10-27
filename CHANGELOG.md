@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-27
+
+### Added
+- CodeQL code scanning of the server and the workflows, on every push and weekly.
+- Coverage-guided fuzzing (Atheris, `fuzz/`, `.github/workflows/fuzz.yml`) of recipient lists (no line break of any
+  kind, so no hidden header) and attachment file names (always safe to create on disk).
+
+### Changed
+- `SECURITY.md`: disclosure timeline (first answer within 3 days, fix and advisory usually within 30 days).
+- Shared guard policy (`garde_fous.py`) brought up to date: zero-width and other format characters, and common
+  Cyrillic or Greek look-alikes, no longer hide a word that needs confirmation.
+
+### Fixed
+- Recipient addresses with a leading, trailing or doubled dot in the local part (`a..b@example.com`) are refused
+  (RFC 5322 dot-atom); attachment names are limited in UTF-16 units like Windows, so a name full of emoji can always
+  be saved (both found by the new fuzzing).
+
 ## [0.12.0] - 2026-10-27
 
 ### Added

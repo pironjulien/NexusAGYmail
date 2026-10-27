@@ -425,8 +425,11 @@ def _check_total(files: list[tuple[str, str, bytes]]) -> None:
 
 # --- brouillons
 
+# Partie locale en dot-atom (RFC 5322 § 3.2.3) : ni point au début ou à la fin, ni deux points de suite (trouvé par
+# le fuzzing : « a..b@example.com » passait).
 _ADDRESS = re.compile(
-    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
+    r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
     r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
 )
 _REPLY_PREFIX = re.compile(r"^\s*(?:re|ré|réf|aw|sv|vs)\s*:", re.IGNORECASE)

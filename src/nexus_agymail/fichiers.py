@@ -63,12 +63,21 @@ def safe_name(name: str, fallback: str = "attachment") -> str:
     text = text.lstrip(".") or fallback
     if _RESERVED.match(text):
         text = f"_{text}"
-    if len(text) > MAX_NAME_CHARS:
+    if _units(text) > MAX_NAME_CHARS:
         stem, dot, ext = text.rpartition(".")
-        ext = ext if dot and len(ext) <= 16 else ""
-        keep = MAX_NAME_CHARS - len(ext) - (1 if ext else 0)
-        text = (stem if ext else text)[:keep].rstrip(". ") + (f".{ext}" if ext else "")
+        suffix = f".{ext}" if dot and len(ext) <= 16 else ""
+        # chaque caractère vaut au moins une unité : borné d'abord, l'ajustement reste court (relecture de Codex)
+        head = (stem if suffix else text)[:MAX_NAME_CHARS]
+        while head and _units(head) + _units(suffix) > MAX_NAME_CHARS:
+            head = head[:-1]
+        text = (head.rstrip(". ") or fallback) + suffix
     return text
+
+
+def _units(text: str) -> int:
+    """Longueur comptée comme Windows (unités UTF-16) : un émoji en vaut deux (trouvé par le fuzzing : 128 émojis
+    passaient la limite en caractères mais pas CreateFileW)."""
+    return len(text.encode("utf-16-le")) // 2
 
 
 def _free_path(directory: Path, name: str) -> Path:

@@ -1,6 +1,6 @@
 [project]
 name = "nexus-agymail"
-version = "0.12.0"
+version = "0.12.1"
 description = "Gmail for Google Antigravity (MCP server): official Gmail API, Google's tool names, sending only after the user's yes, no permanent deletion"
 authors = [{ name = "Julien Piron" }]
 license = "MIT"
