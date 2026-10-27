@@ -119,3 +119,9 @@ def test_long_name_like_an_encoded_word_has_no_line_break() -> None:
     message = EmailMessage()
     message["To"] = out
     assert str(policy.default.header_factory("To", out)) == f"{literal} <a@example.com>"
+
+
+def test_control_characters_in_display_name_found_by_the_fuzzer() -> None:
+    import base64
+
+    targets.target(base64.b64decode("AAAAAAAAAPoACQkmCS4JUAkJCVAJAEMyPEBAL5YAbzoJbwkuCVAJCS4JUAkuCVQJQAlQCS5U"))

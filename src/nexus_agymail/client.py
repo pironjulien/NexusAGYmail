@@ -20,10 +20,12 @@ import re
 import secrets
 import socket
 import time
+import unicodedata
 import weakref
 from collections.abc import Callable
 from email import message_from_bytes
-from email.header import Header, decode_header, make_header
+from email.charset import Charset
+from email.header import decode_header, make_header
 from email.message import EmailMessage, Message
 from email.policy import compat32
 from email.policy import default as _READER_POLICY
@@ -469,7 +471,10 @@ def normalize_addresses(value: str, field: str, required: bool = False) -> str:
         # à une espace, nom vide retiré, puis réécrit : sinon la liste ne se relisait pas à l'identique (fuzzing).
         if "=?" in name:
             name = str(_READER_POLICY.header_factory("X-Name", name))
-        clean.append(_format_address(" ".join(name.split()), candidate))
+        name = " ".join(name.split())
+        if any(unicodedata.category(c) == "Cc" for c in name):  # NUL… dans un nom (trouvé par le fuzzing)
+            raise ValueError(f"{field}: control character in the display name {name!r}")
+        clean.append(_format_address(name, candidate))
     if not clean:
         raise ValueError(f"{field}: no valid address")
     return ", ".join(clean)
@@ -479,8 +484,9 @@ def _format_address(name: str, address: str) -> str:
     """« Nom <adresse> ». Un nom qui ressemble lui-même à un mot encodé est encodé (RFC 2047 § 5) : un lecteur le
     décoderait sinon en un autre nom."""
     if _ENCODED_WORD.search(name):
-        # plié par une espace, jamais par un saut de ligne (refusé dans un en-tête : relecture de Codex)
-        return f"{Header(name, 'utf-8').encode(linesep=' ')} <{address}>"
+        # un seul mot encodé, comme formataddr pour un nom non ASCII : jamais plié (Header.encode pliait par un saut
+        # de ligne, et son pliage se relisait avec une espace en plus sous Linux)
+        return f"{Charset('utf-8').header_encode(name)} <{address}>"
     return formataddr((name, address))
 
 
