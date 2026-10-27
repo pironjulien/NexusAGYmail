@@ -6,4 +6,4 @@ import sys
 # PYTHONDONTWRITEBYTECODE, ceci couvre les sous-modules si Python est lancé sans eux.
 sys.dont_write_bytecode = True
 
-__version__ = "0.11.0"
+__version__ = "0.11.1"

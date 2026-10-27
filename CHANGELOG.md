@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-27
+
+### Added
+- `server.json`: `icons` (Nexus family medallion, PNG and SVG), so the MCP registry and its clients show the product
+  icon.
+
 ## [0.11.0] - 2026-10-27
 
 ### Added
