@@ -41,7 +41,7 @@ from mcp.types import (
 from mcp.types.version import is_version_at_least
 from pydantic import BaseModel, Field, StrictBool
 
-from . import __version__, auth, client, fichiers, garde_fous, journal, mime, status, suivi
+from . import __version__, auth, client, envois, fichiers, garde_fous, journal, mime, status, suivi
 
 DEFAULT_MAX_CHARS = 8090  # ≈ 5 000 × nombre d'or : un mail entier ou presque, sans noyer le contexte
 DEFAULT_THREAD_MAX_CHARS = 16180  # ≈ 10 000 × nombre d'or, partagés entre les messages du fil
@@ -171,11 +171,18 @@ def _journal_line(ctx: Any, status_code: tuple[str | None, str | None], debut: f
         agent = journal.agent_of(getattr(info, "name", None)) or journal.agent_of(os.environ.get("NEXUS_AGENT"))
         name = (getattr(ctx, "params", None) or {}).get("name")
         issue, cause = journal.issue_et_cause(*status_code)
-        journal.ecrire(
-            agent, name if isinstance(name, str) else "?", issue, (time.perf_counter() - debut) * 1000, cause
-        )
+        # Nom d'outil inconnu jamais écrit tel quel : il vient du client et peut contenir une adresse.
+        action = name if isinstance(name, str) and _known_tool(name) else "unknown"
+        journal.ecrire(agent, action, issue, (time.perf_counter() - debut) * 1000, cause)
     except Exception:  # noqa: BLE001, S110 - journal : jamais bloquant
         pass
+
+
+def _known_tool(name: str) -> bool:
+    try:
+        return mcp._tool_manager.get_tool(name) is not None  # pyright: ignore[reportPrivateUsage]
+    except Exception:  # registre illisible : prudence, le nom n'est pas écrit
+        return False
 
 
 mcp.middleware.append(_journal_call)
@@ -997,15 +1004,46 @@ def _send_summary(draft: dict[str, Any], act: dict[str, Any], refusal: str) -> s
         result["provenance"] = provenance
     minutes = int(garde_fous.load()["accord"]["duree_s"]) // 60
     result["instructions"] = SEND_INSTRUCTIONS.format(accord=token[0], minutes=minutes)
+    if previous := _previous_send(draft):  # « rien n'est parti » ne vaut que pour CET appel
+        result["previous_send"] = previous
+        result["instructions"] = result["instructions"].replace("Nothing was sent.", "This call sent nothing.")
+        if "reason" in result:
+            result["reason"] = result["reason"].replace("Nothing was sent.", "This call sent nothing.")
     result["warning"] = frame.note()
     return _dump(result)
 
 
-SENT_DRAFT_NOTES = {
-    "kept_changed": "The draft changed after its last check: the approved version was sent, and the changed draft "
-    "stays in Drafts, unsent. Tell the user.",
-    "kept_error": "The message was sent, but the draft could not be removed: it is still in Drafts. Tell the user.",
+DRAFT_KEPT_NOTE = (
+    "The approved version was sent. The draft is kept in Drafts (never deleted for good here, so that an edit made "
+    "meanwhile cannot be lost): tell the user they can delete it in Gmail if they no longer need it."
+)
+UNKNOWN_SEND_NOTE = (
+    "The send request reached Gmail but no answer came back: this email may or may not have been sent. Do not send it "
+    "again: tell the user to check their Sent folder first. The next summary of this draft will carry the warning."
+)
+PREVIOUS_SEND = {
+    "unknown": "This exact draft may already have been sent: a send attempt on {at} got no answer from Gmail, and it "
+    "was not found in Sent. Tell the user and let them check Sent before they say yes again.",
+    "found_in_sent": "This exact draft was already sent: a message with the same subject, recipients and text is in "
+    "Sent since an attempt on {at} (its answer was lost). Sending again would send a second copy: tell the user.",
 }
+
+
+def _previous_send(draft: dict[str, Any]) -> dict[str, Any] | None:
+    """Envoi à l'issue inconnue de CES octets exacts : averti, et cherché dans Envoyés (lecture seule)."""
+    entry = envois.unknown(str(draft.get("raw_sha256") or ""))
+    if not entry:
+        return None
+    at = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(entry["attempted_at"]))
+    try:
+        found = client.find_sent(draft, entry["attempted_at"])
+    except Exception:  # rapprochement impossible : l'avertissement reste, au plus prudent
+        found = ""
+    status = "found_in_sent" if found else "unknown"
+    result = {"status": status, "attempted_at": at, "warning": PREVIOUS_SEND[status].format(at=at)}
+    if found:
+        result["messageId"] = found
+    return result
 
 
 def send_draft(draftId: str, confirm: bool = False, accord: str = "") -> str:
@@ -1019,15 +1057,25 @@ def send_draft(draftId: str, confirm: bool = False, accord: str = "") -> str:
         refusal = ACCORDS.check(act, confirm, accord)
         if refusal:
             return _send_summary(draft, act, refusal)
-        sent = client.send_approved(draft)
+        attempted_at = int(time.time())
+        try:
+            sent = client.send_approved(draft)
+        except client.SendOutcomeUnknown:
+            envois.mark_unknown(draft["raw_sha256"], draftId, attempted_at)  # jamais relancé
+            return _dump({"status": "unknown", "code": "send_outcome_unknown", "sent": None,
+                          "message": UNKNOWN_SEND_NOTE})  # fmt: skip
+        envois.resolve(draft["raw_sha256"])
     except Exception as exc:
         return _error(exc)
-    if note := SENT_DRAFT_NOTES.get(sent["draft"]):
-        return _dump(
-            {"status": "success", "sent": True, "message": _clean_tree(sent), "draft": sent["draft"], "note": note}
-        )
-    return _dump({"status": "success", "sent": True, "message": _clean_tree(sent), "draft": sent["draft"]})
-    return _dump({"status": "success", "sent": True, "message": _clean_tree(sent)})
+    return _dump(
+        {
+            "status": "success",
+            "sent": True,
+            "message": _clean_tree(sent),
+            "draft": sent["draft"],
+            "note": DRAFT_KEPT_NOTE,
+        }
+    )
 
 
 # --- confirmation native (élicitation MCP) quand le client la propose
@@ -1070,6 +1118,8 @@ def _input_required(ctx: Context) -> bool:
 def _confirm_message(draft: dict[str, Any], act: dict[str, Any]) -> str:
     """Ce que voit l'utilisateur dans la fenêtre du client : tout ce qui partirait (le corps jusqu'à 1 618 signes)."""
     lines = ["Send this email now? Nothing is sent unless you answer yes.", ""]
+    if previous := draft.get("previous_send"):
+        lines += [f"⚠ {previous['warning']}", ""]
     for field, label in (("from", "From"), ("replyTo", "Reply-To"), ("to", "To"), ("cc", "Cc"), ("bcc", "Bcc")):
         if value := _clean(draft.get(field)).strip():
             lines.append(f"{label}: {value}")
@@ -1111,6 +1161,8 @@ def _prepare(draft_id: str) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Brouillon lu, action exacte et jeton lié à CE qui va être montré dans la fenêtre."""
     draft = client.read_draft_exact(draft_id=draft_id)
     act = _draft_action(draft_id, draft)
+    if previous := _previous_send(draft):  # montré dans la fenêtre, hors de l'action liée à l'accord
+        draft["previous_send"] = previous
     return draft, act, ACCORDS.propose(act)
 
 

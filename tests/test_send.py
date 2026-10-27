@@ -110,8 +110,8 @@ def test_envoi_apres_oui(gmail):
     token = json.loads(server.send_draft(draftId="d1"))["accord"]
     data = json.loads(server.send_draft(draftId="d1", confirm=True, accord=token))
     assert data["status"] == "success" and data["sent"] is True and data["message"]["labels"] == ["SENT"]
-    assert gmail.kinds().count("message-send") == 1 and len(gmail.sent) == 1 and "d1" not in gmail.draft_store
-    assert "draft-send" not in gmail.kinds() and data["draft"] == "deleted"
+    assert gmail.kinds().count("message-send") == 1 and len(gmail.sent) == 1 and "d1" in gmail.draft_store
+    assert "draft-send" not in gmail.kinds() and data["draft"] == "kept"
 
 
 def test_envoi_brouillon_introuvable(gmail):

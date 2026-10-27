@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-10-27
+
+### Security
+- Sending: the draft is never deleted after sending any more (`draft: kept`, with a note: delete it in Gmail if you
+  like). Re-reading, comparing then calling `drafts.delete` was not atomic, and `drafts.delete` is permanent: an edit
+  saved in between was lost for good. Keeping the draft was chosen over trashing it, whose effect on a draft through
+  the API cannot be checked without a real account. The code no longer calls any `.delete(`.
+- Send with an unknown outcome (answer lost after `messages.send`: 5xx, timeout, network): returned as
+  `status: unknown`, `code: send_outcome_unknown`, never retried. It is remembered by the SHA-256 of the raw bytes
+  (`envois.json`, locked, no email content); the next summary and dialog of that same draft warn (`previous_send`)
+  that it may already have been sent, after looking for it in Sent (same subject, To, Cc and text: `found_in_sent`
+  with its ID). "Nothing was sent" there becomes "This call sent nothing". A clear refusal from Gmail (4xx) stays an
+  ordinary error; a confirmed send clears the warning.
+- Usage journal: an unknown tool name is written as `unknown`, never as given (it comes from the client and may hold
+  an address).
+
 ## [0.11.2] - 2026-10-27
 
 ### Added

@@ -174,8 +174,7 @@ def test_jamais_de_suppression_definitive():
 
     source = inspect.getsource(client)
     assert not re.search(r"\.(?:batchDelete|emptyTrash)\(|(?:messages|threads|labels)\(\)\s*\.delete\(", source)
-    # Seule suppression : le brouillon dont les octets exacts viennent de partir (send_approved).
-    assert source.count(".delete(") == 1 and "drafts().delete(" in source
+    assert ".delete(" not in source  # pas même le brouillon envoyé : il est gardé (0.11.3)
     assert "mail.google.com" not in source
     names = {tool.name for tool in __import__("asyncio").run(server.mcp.list_tools())}
     assert not any("delete" in n or "empty" in n or "spam" in n for n in names)

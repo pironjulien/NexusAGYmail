@@ -180,6 +180,7 @@ class FakeGmail:
         self.history_floor = 0  # positions plus anciennes : expirées (404)
         self.history: list[dict[str, Any]] = []
         self.after: dict[str, Callable[[], None]] = {}  # crochet à usage unique, par type de requête
+        self.lost_sends = 0  # envois traités par Gmail dont la réponse se perd (503 rendu après l'envoi)
 
     def kinds(self) -> list[str]:
         return [kind for kind, _ in self.calls]
@@ -443,8 +444,12 @@ class FakeGmail:
             sent["threadId"] = data.get("threadId") or sent["id"]
             sent["labelIds"] = ["SENT"]
             sent["_raw"] = raw
+            sent["internalDate"] = str(int(time.time() * 1000))
             self.sent.append(sent)
             self.add(sent)
+            if self.lost_sends:  # parti, mais la réponse n'arrive pas : issue inconnue pour le client
+                self.lost_sends -= 1
+                return 503, {"error": {"code": 503, "message": "réponse perdue"}}
             return 200, {"id": sent["id"], "threadId": sent["threadId"], "labelIds": sent["labelIds"]}
         if kind == "draft-update":
             draft = self.draft_store.get(segments[1])

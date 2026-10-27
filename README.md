@@ -136,10 +136,12 @@ filters or signature, another Google account).
   accord (10 minutes) bound to the exact draft: each recipient with its role (to, cc, bcc kept apart), From,
   Reply-To, subject, full body, every part (HTML included), the SHA-256 of each attachment and of the draft's raw
   bytes. The draft is read once in raw format just before sending: if anything changed, nothing is sent and a new
-  summary is returned. Otherwise those exact approved bytes are sent (`messages.send`, same thread), then the draft
-  is removed if it is still identical; a draft changed in the meantime is kept, unsent, and reported. A change made
-  after that last read can never go out in place of what was approved. A send is never retried after an ambiguous
-  answer (5xx, network), only after a 429. No direct sending without a draft.
+  summary is returned. Otherwise those exact approved bytes are sent (`messages.send`, same thread). The draft is
+  kept (delete it in Gmail if you like): `drafts.delete` is permanent, and an edit saved meanwhile would be lost. A
+  change made after that last read can never go out in place of what was approved. A send is never retried after an
+  ambiguous answer (5xx, timeout, network), only after a 429: the outcome is reported as unknown, remembered by the
+  SHA-256 of the raw bytes (`envois.json`, nothing else kept), and the next summary or dialog of that same draft
+  warns that it may already have been sent, after looking for it in Sent. No direct sending without a draft.
 - **Provenance**: a recipient found in an email the agent read is flagged in the summary (`provenance`): allowed only
   if the user asked for it.
 - **Prompt injection**: subject, snippet, body, addresses and attachment names are returned framed as
@@ -186,7 +188,8 @@ latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
 - **What it stores**, under `~/.nexus/nexus-agymail/` (or `NEXUS_AGYMAIL_HOME`): the refresh token (`token.bin`,
   encrypted with DPAPI on Windows, a `0600` file elsewhere), its lock file, the copy of your OAuth client
   (`client_secret.json`), the position of `list_new_messages` per account and label (`history.json`: a Gmail
-  `historyId` and the time of the last check, no email content), and backups of the Antigravity config files `setup` edits (`backups/`). The server also
+  `historyId` and the time of the last check, no email content), the sends whose outcome is unknown (`envois.json`:
+  the SHA-256 of the raw bytes, the draft ID and the attempt time, no email content), and backups of the Antigravity config files `setup` edits (`backups/`). The server also
   writes `~/.nexus/status/agymail.json` (installed and latest version, last check time) for the Nexus app. Attachments you ask
   it to save go to `~/Downloads/NexusAGYmail` (or the folder given). In memory only, for the life of the server: the
   pending send accords and the addresses seen in emails read (for the `provenance` warning). No email is written to

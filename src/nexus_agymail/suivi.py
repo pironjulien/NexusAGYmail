@@ -60,12 +60,13 @@ def _unlock(fd: int) -> None:
 
 
 @contextmanager
-def _locked() -> Iterator[None]:
-    """Section exclusive entre fils et entre processus (verrou du premier octet de history.json.lock)."""
-    target = path()
+def locked(name: str = FILE) -> Iterator[None]:
+    """Section exclusive entre fils et entre processus (verrou du premier octet de <name>.lock, dans le dossier
+    d'état). Aussi utilisé par envois.py pour son propre fichier."""
+    target = auth.get_nexus_dir() / name
     target.parent.mkdir(parents=True, exist_ok=True)
     with _THREAD_LOCK:
-        fd = os.open(target.with_name(FILE + ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
+        fd = os.open(target.with_name(name + ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
         try:
             deadline = time.monotonic() + LOCK_TIMEOUT_S
             while True:
@@ -74,7 +75,7 @@ def _locked() -> Iterator[None]:
                     break
                 except OSError:
                     if time.monotonic() > deadline:
-                        raise TimeoutError(f"{FILE} is locked by another process") from None
+                        raise TimeoutError(f"{name} is locked by another process") from None
                     threading.Event().wait(0.01)  # pas time.sleep : attente réelle même quand il est simulé
             try:
                 yield
@@ -84,12 +85,30 @@ def _locked() -> Iterator[None]:
             os.close(fd)
 
 
-def _read() -> dict[str, Any]:
+def read_json(name: str) -> dict[str, Any]:
+    """Contenu d'un fichier d'état (à lire sous locked) ; illisible ou absent = {}."""
     try:
-        data = json.loads(path().read_text(encoding="utf-8"))
+        data = json.loads((auth.get_nexus_dir() / name).read_text(encoding="utf-8"))
     except OSError, ValueError:
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def write_json(name: str, data: dict[str, Any]) -> None:
+    """Remplacement atomique d'un fichier d'état (à appeler sous locked) par un temporaire au nom unique."""
+    target = auth.get_nexus_dir() / name
+    fd, temporary = tempfile.mkstemp(prefix=f"{name}.", suffix=".tmp", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        os.replace(temporary, target)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def _read() -> dict[str, Any]:
+    return read_json(FILE)
 
 
 def _entry(data: dict[str, Any], account: str, label: str) -> dict[str, Any]:
@@ -100,7 +119,7 @@ def _entry(data: dict[str, Any], account: str, label: str) -> dict[str, Any]:
 def load(account: str, label: str) -> dict[str, Any]:
     """{historyId, checked_at, positions} de ce compte et de ce libellé ; historyId et checked_at absents si aucune
     position courante n'est connue."""
-    with _locked():
+    with locked():
         entry = _entry(_read(), account, label)
     result: dict[str, Any] = {"positions": _positions(entry)}
     if str(entry.get("historyId") or "").isdigit():
@@ -134,7 +153,7 @@ def bound(saved: dict[str, Any], history_id: str) -> int:
 def save(account: str, label: str, history_id: str, checked_at: int, advance: bool = True) -> None:
     """Retient la borne de date de `history_id` ; avec advance, en fait aussi la position courante. Toute la
     transaction (lire, modifier, remplacer) est verrouillée."""
-    with _locked():
+    with locked():
         data = _read()
         account_entry = data.get(account.casefold())
         if not isinstance(account_entry, dict):
@@ -151,12 +170,4 @@ def save(account: str, label: str, history_id: str, checked_at: int, advance: bo
         if advance:
             current = {"historyId": str(history_id), "checked_at": int(checked_at)}
         labels[label or "*"] = {**current, "positions": positions}
-        target = path()
-        fd, temporary = tempfile.mkstemp(prefix=f"{FILE}.", suffix=".tmp", dir=target.parent)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-            os.replace(temporary, target)
-        except BaseException:
-            Path(temporary).unlink(missing_ok=True)
-            raise
+        write_json(FILE, data)

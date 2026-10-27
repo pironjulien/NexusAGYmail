@@ -100,17 +100,17 @@ def test_brouillon_change_juste_apres_la_relecture_le_contenu_approuve_part(gmai
     sent = message_from_bytes(gmail.sent[0]["_raw"], policy=default)
     assert "pirate" not in str(sent["To"]) and gmail.sent[0]["threadId"] == "t-d1"
     assert "draft-send" not in gmail.kinds()
-    # Le brouillon modifié entre-temps n'est pas supprimé : il reste à l'utilisateur, signalé.
-    assert "d1" in gmail.draft_store and data["draft"] == "kept_changed"
+    # Le brouillon modifié entre-temps n'est pas supprimé : il reste à l'utilisateur.
+    assert "d1" in gmail.draft_store and data["draft"] == "kept"
 
 
-def test_envoi_normal_retire_le_brouillon(gmail):
+def test_envoi_normal_octets_exacts(gmail):
     stored_draft(gmail, "d1", "Bonjour Bob", Bcc="carol@example.com")
     approved = gmail.draft_store["d1"]["message"]["_raw"]
     data = send(summary()["accord"])
-    assert data["sent"] is True and data["draft"] == "deleted" and "d1" not in gmail.draft_store
+    assert data["sent"] is True and data["draft"] == "kept" and "d1" in gmail.draft_store
     assert gmail.sent[0]["_raw"] == approved and "Bcc: carol@example.com" in approved.decode()
-    assert gmail.kinds().count("message-send") == 1 and gmail.kinds().count("draft-delete") == 1
+    assert gmail.kinds().count("message-send") == 1 and "draft-delete" not in gmail.kinds()
 
 
 def test_envoi_d_un_gros_brouillon_par_envoi_reprenable(gmail):

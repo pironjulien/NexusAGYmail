@@ -2,8 +2,9 @@
 
 Aucune suppression définitive de message : ni messages.delete, ni batchDelete, ni vidage de corbeille (la portée
 gmail.modify ne les permet d'ailleurs pas). L'envoi ne part que d'un brouillon existant, après confirmation : ses
-octets exacts, lus une fois en format raw et approuvés, sont envoyés tels quels (messages.send, même fil), puis le
-brouillon est retiré (drafts.delete) s'il n'a pas changé entre-temps, comme drafts.send l'aurait fait.
+octets exacts, lus une fois en format raw et approuvés, sont envoyés tels quels (messages.send, même fil). Le
+brouillon est gardé : jamais de drafts.delete, définitif, qui perdrait une retouche enregistrée entre-temps. Un envoi
+dont la réponse se perd n'est jamais relancé (SendOutcomeUnknown) ; find_sent le recherche dans Envoyés.
 
 Chaque requête est relancée avec attente exponentielle sur 429 et 5xx (num_retries de google-api-python-client) ;
 les requêtes groupées (BatchHttpRequest) relancent elles-mêmes les seuls éléments refusés pour quota.
@@ -847,12 +848,19 @@ def _execute_send(request: Any) -> Any:
     raise AssertionError("unreachable")
 
 
+class SendOutcomeUnknown(Exception):
+    """messages.send est parti sans réponse exploitable (5xx, délai, réseau) : le message a pu partir ou non."""
+
+
 def send_approved(approved: dict[str, Any], service: Any = None) -> dict[str, Any]:
-    """Envoie les octets exacts du brouillon approuvé (lus par read_draft_exact), dans son fil, puis retire le
-    brouillon s'il est encore identique à ces octets ; modifié entre-temps, il est gardé (`draft`: kept_changed).
+    """Envoie les octets exacts du brouillon approuvé (lus par read_draft_exact), dans son fil.
+
+    Le brouillon n'est jamais supprimé (`draft`: kept) : drafts.delete est définitif, et une retouche enregistrée
+    entre une relecture et la suppression serait perdue sans recours. Refus net de Gmail (4xx) : erreur, rien n'est
+    parti. Réponse ambiguë (5xx, délai, réseau) : SendOutcomeUnknown, jamais relancé.
 
     Seul chemin d'envoi, et seulement depuis un brouillon : aucun envoi d'un message composé ici."""
-    draft_id = _draft_id(str(approved.get("id") or ""))
+    _draft_id(str(approved.get("id") or ""))
     raw: bytes = approved["raw"]
     if hashlib.sha256(raw).hexdigest() != approved.get("raw_sha256"):
         raise GmailApiError("approved content altered before sending: nothing was sent")
@@ -863,22 +871,48 @@ def send_approved(approved: dict[str, Any], service: Any = None) -> dict[str, An
         media = MediaIoBaseUpload(io.BytesIO(raw), mimetype="message/rfc822", resumable=True)
     else:
         body["raw"] = base64.urlsafe_b64encode(raw).decode("ascii")
-    sent = _execute_send(svc.users().messages().send(userId="me", body=body, media_body=media))
-    state = "deleted"
+    request = svc.users().messages().send(userId="me", body=body, media_body=media)
     try:
-        current = _execute(svc.users().drafts().get(userId="me", id=draft_id, format="raw"))
-        if mime.b64decode(str((current.get("message") or {}).get("raw") or "")) != raw:
-            state = "kept_changed"
-        else:
-            _execute(svc.users().drafts().delete(userId="me", id=draft_id))
-    except Exception:
-        state = "kept_error"  # le message est parti ; le brouillon reste, à retirer à la main
-    return {
-        "id": sent.get("id"),
-        "threadId": sent.get("threadId"),
-        "labels": sent.get("labelIds", []),
-        "draft": state,
+        sent = _execute_send(request)
+    except HttpError as exc:
+        if 400 <= _status(exc) < 500:  # refusé par Gmail (429 compris, après ses relances) : rien n'est parti
+            raise
+        raise SendOutcomeUnknown(f"Gmail answered {_status(exc)} after the send request") from exc
+    except GmailAuthError, RefreshError, ValueError, GmailApiError:
+        raise  # avant que la requête ne parte : rien n'est parti
+    except Exception as exc:
+        raise SendOutcomeUnknown(f"no answer from Gmail after the send request ({type(exc).__name__})") from exc
+    return {"id": sent.get("id"), "threadId": sent.get("threadId"), "labels": sent.get("labelIds", []), "draft": "kept"}
+
+
+def find_sent(approved: dict[str, Any], since_epoch: int, service: Any = None) -> str:
+    """Rapprochement après une issue inconnue : identifiant du message de la boîte Envoyés, envoyé depuis la
+    tentative (une minute de marge), qui a le même objet, les mêmes To et Cc et le même texte que les octets approuvés ;
+    « » si aucun. Lecture seule : ne renvoie jamais rien."""
+    svc = service or get_service()
+    params: dict[str, Any] = {
+        "userId": "me",
+        "labelIds": ["SENT"],
+        "q": f"after:{max(0, int(since_epoch) - 60)}",
+        "maxResults": 20,
     }
+    ids = [ref["id"] for ref in _execute(svc.users().messages().list(**params)).get("messages") or [] if ref.get("id")]
+    found = _batch_get(svc, ids, format="full") if ids else {}
+
+    def same(field: str, value: str) -> bool:
+        return " ".join(str(approved.get(field) or "").split()) == " ".join(value.split())
+
+    for message_id in ids:
+        payload = (found.get(message_id) or {}).get("payload") or {}
+        headers = payload.get("headers") or []
+        if (
+            same("subject", mime.header(headers, "Subject"))
+            and same("to", mime.header(headers, "To"))
+            and same("cc", mime.header(headers, "Cc"))
+            and same("text", mime.extract(payload)["text"])
+        ):
+            return message_id
+    return ""
 
 
 # --- libellés, rangement, corbeille
