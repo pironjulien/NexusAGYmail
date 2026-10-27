@@ -17,12 +17,17 @@ FILE = "envois.json"
 KEPT = 34  # cas gardés au plus (suite de Fibonacci, ≈ φ⁷) ; les plus anciens sortent d'abord
 
 
-def mark_unknown(raw_sha256: str, draft_id: str, attempted_at: int) -> None:
+def mark_unknown(raw_sha256: str, draft_id: str, attempted_at: int) -> bool:
+    """Trace écrite AVANT messages.send (« tentative en cours ») : elle reste si l'issue est inconnue ou si le
+    serveur s'arrête pendant l'envoi. Une trace plus ancienne des mêmes octets est gardée telle quelle (date de la
+    première tentative). Rend True si la trace est nouvelle."""
     with suivi.locked(FILE):
         data = suivi.read_json(FILE)
-        data.pop(raw_sha256, None)
+        if isinstance(data.get(raw_sha256), dict):
+            return False
         data[raw_sha256] = {"draftId": str(draft_id), "attempted_at": int(attempted_at)}
         suivi.write_json(FILE, dict(list(data.items())[-KEPT:]))
+    return True
 
 
 def unknown(raw_sha256: str) -> dict[str, Any]:

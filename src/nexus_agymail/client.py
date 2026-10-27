@@ -829,6 +829,7 @@ def read_draft_exact(draft_id: str, service: Any = None) -> dict[str, Any]:
         for ref, part in mime.attachment_parts(payload)
     ]
     result["attachments"] = [{**info, "sha256": hashlib.sha256(data).hexdigest()} for info, data in pairs]
+    result["messageIdHeader"] = mime.header(headers, "Message-ID").strip()
     result["multipart"] = str(payload["mimeType"]).startswith("multipart/")
     result["raw"] = raw
     result["raw_sha256"] = hashlib.sha256(raw).hexdigest()
@@ -878,18 +879,31 @@ def send_approved(approved: dict[str, Any], service: Any = None) -> dict[str, An
         if 400 <= _status(exc) < 500:  # refusé par Gmail (429 compris, après ses relances) : rien n'est parti
             raise
         raise SendOutcomeUnknown(f"Gmail answered {_status(exc)} after the send request") from exc
-    except GmailAuthError, RefreshError, ValueError, GmailApiError:
-        raise  # avant que la requête ne parte : rien n'est parti
-    except Exception as exc:
-        raise SendOutcomeUnknown(f"no answer from Gmail after the send request ({type(exc).__name__})") from exc
+    except GmailAuthError, RefreshError:
+        raise  # jeton refusé avant que la requête ne parte : rien n'est parti
+    except Exception as exc:  # délai, réseau, réponse 2xx illisible... : la requête a pu être traitée
+        raise SendOutcomeUnknown(f"no usable answer from Gmail after the send request ({type(exc).__name__})") from exc
+    if not isinstance(sent, dict) or not sent.get("id"):  # 2xx sans message lisible : parti ou non, on ne sait pas
+        raise SendOutcomeUnknown("Gmail answered the send request without a readable message")
     return {"id": sent.get("id"), "threadId": sent.get("threadId"), "labels": sent.get("labelIds", []), "draft": "kept"}
 
 
-def find_sent(approved: dict[str, Any], since_epoch: int, service: Any = None) -> str:
-    """Rapprochement après une issue inconnue : identifiant du message de la boîte Envoyés, envoyé depuis la
-    tentative (une minute de marge), qui a le même objet, les mêmes To et Cc et le même texte que les octets approuvés ;
-    « » si aucun. Lecture seule : ne renvoie jamais rien."""
+_MESSAGE_ID = re.compile(r"<?([^<>\s\"]+@[^<>\s\"]+)>?")
+
+
+def find_sent(approved: dict[str, Any], since_epoch: int, service: Any = None) -> tuple[str, str]:
+    """Rapprochement après une issue inconnue, en lecture seule (ne renvoie jamais rien). (statut, identifiant) :
+
+    - « identical » : un message d'Envoyés porte le Message-ID des octets approuvés : identité prouvée ;
+    - « similar » : un message envoyé depuis la tentative (une minute de marge) a le même objet, les mêmes To et Cc
+      et le même texte : SEMBLABLE seulement (pièce jointe, Bcc ou autre envoi possibles), doublon possible ;
+    - (« », « ») si aucun."""
     svc = service or get_service()
+    if match := _MESSAGE_ID.fullmatch(str(approved.get("messageIdHeader") or "")):
+        params = {"userId": "me", "labelIds": ["SENT"], "q": f"rfc822msgid:{match.group(1)}", "maxResults": 5}
+        refs = _execute(svc.users().messages().list(**params)).get("messages") or []
+        if refs and refs[0].get("id"):
+            return "identical", str(refs[0]["id"])
     params: dict[str, Any] = {
         "userId": "me",
         "labelIds": ["SENT"],
@@ -911,8 +925,8 @@ def find_sent(approved: dict[str, Any], since_epoch: int, service: Any = None) -
             and same("cc", mime.header(headers, "Cc"))
             and same("text", mime.extract(payload)["text"])
         ):
-            return message_id
-    return ""
+            return "similar", message_id
+    return "", ""
 
 
 # --- libellés, rangement, corbeille

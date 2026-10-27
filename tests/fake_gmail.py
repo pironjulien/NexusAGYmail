@@ -181,6 +181,7 @@ class FakeGmail:
         self.history: list[dict[str, Any]] = []
         self.after: dict[str, Callable[[], None]] = {}  # crochet à usage unique, par type de requête
         self.lost_sends = 0  # envois traités par Gmail dont la réponse se perd (503 rendu après l'envoi)
+        self.garbled_sends = 0  # envois traités par Gmail dont la réponse 200 arrive tronquée (JSON illisible)
 
     def kinds(self) -> list[str]:
         return [kind for kind, _ in self.calls]
@@ -212,6 +213,8 @@ class FakeGmail:
         if path.startswith("/upload/") or path.startswith("/fake-session/"):
             return self._upload(uri, method, body)
         status, data = self._route(method, uri, body)
+        if data.get("_garbled"):
+            return self._response(status), b'{"id": "s1", "thre'
         return self._response(status), json.dumps(data).encode("utf-8")
 
     def _hook(self, kind: str) -> None:
@@ -329,11 +332,17 @@ class FakeGmail:
     @staticmethod
     def _matches(msg: dict[str, Any], query: dict[str, list[str]]) -> bool:
         """Filtre de messages.list : chaque libellé de labelIds, et les termes after:/before: (secondes epoch, comparées
-        à internalDate) de `q`. Un autre terme fait échouer le test plutôt que d'être ignoré en silence."""
+        à internalDate) et rfc822msgid: (en-tête Message-ID) de `q`. Un autre terme fait échouer le test plutôt que
+        d'être ignoré en silence."""
         if any(label not in msg["labelIds"] for label in query.get("labelIds", [])):
             return False
         received = int(msg.get("internalDate") or 0) // 1000
         for term in " ".join(query.get("q", [])).split():
+            if term.startswith("rfc822msgid:"):
+                headers = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers") or []}
+                if headers.get("message-id", "").strip().strip("<>") != term.split(":", 1)[1].strip("<>"):
+                    return False
+                continue
             match = re.fullmatch(r"(after|before):(\d+)", term)
             if not match:
                 raise AssertionError(f"fake Gmail: unsupported query term {term!r}")
@@ -450,6 +459,9 @@ class FakeGmail:
             if self.lost_sends:  # parti, mais la réponse n'arrive pas : issue inconnue pour le client
                 self.lost_sends -= 1
                 return 503, {"error": {"code": 503, "message": "réponse perdue"}}
+            if self.garbled_sends:  # parti, réponse 200 tronquée
+                self.garbled_sends -= 1
+                return 200, {"_garbled": True}
             return 200, {"id": sent["id"], "threadId": sent["threadId"], "labelIds": sent["labelIds"]}
         if kind == "draft-update":
             draft = self.draft_store.get(segments[1])

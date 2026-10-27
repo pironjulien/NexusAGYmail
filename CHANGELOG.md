@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.4] - 2026-10-27
+
+### Security
+- Looking in Sent after an unknown outcome: a mere resemblance (same subject, To, Cc and text) now only gives
+  `similar_in_sent` ("similar message, possible duplicate", `similarId`), never "this exact draft was already
+  sent": attachments and Bcc are not compared there. `found_in_sent` is stated only when proven by the Message-ID of
+  the draft's raw bytes (`rfc822msgid:` search). No Message-ID is added to the approved bytes.
+- Sending: the "attempt in progress" record (`envois.json`) is written BEFORE `messages.send` and survives a server
+  crash; if it cannot be written, nothing is sent. A local storage failure after sending no longer hides what Gmail
+  did: sent (with `state_warning`) or unknown outcome, never an internal error. A clear refusal only clears the
+  record it had just written (an older uncertainty stays reported).
+- An unreadable 2xx answer (truncated JSON) or one without a message after sending: unknown outcome, no longer an
+  internal error.
+
 ## [0.11.3] - 2026-10-27
 
 ### Security

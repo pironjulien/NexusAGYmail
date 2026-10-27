@@ -1024,9 +1024,16 @@ UNKNOWN_SEND_NOTE = (
 PREVIOUS_SEND = {
     "unknown": "This exact draft may already have been sent: a send attempt on {at} got no answer from Gmail, and it "
     "was not found in Sent. Tell the user and let them check Sent before they say yes again.",
-    "found_in_sent": "This exact draft was already sent: a message with the same subject, recipients and text is in "
-    "Sent since an attempt on {at} (its answer was lost). Sending again would send a second copy: tell the user.",
+    "similar_in_sent": "A similar message was found in Sent (possible duplicate): same subject, To, Cc and text, sent "
+    "since a send attempt on {at} that got no answer. It may or may not be this draft (attachments and Bcc are not "
+    "compared): tell the user and let them check it before they say yes again.",
+    "found_in_sent": "This exact draft was already sent: Sent holds a message with its own Message-ID, after a send "
+    "attempt on {at} whose answer was lost. Sending again would send a second copy: tell the user.",
 }
+STATE_WARNING = (
+    "The local record of send attempts (envois.json) could not be updated ({error}): the outcome above is still "
+    "right, but a later summary of this draft may carry an outdated warning."
+)
 
 
 def _previous_send(draft: dict[str, Any]) -> dict[str, Any] | None:
@@ -1036,14 +1043,27 @@ def _previous_send(draft: dict[str, Any]) -> dict[str, Any] | None:
         return None
     at = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(entry["attempted_at"]))
     try:
-        found = client.find_sent(draft, entry["attempted_at"])
+        kind, found = client.find_sent(draft, entry["attempted_at"])
     except Exception:  # rapprochement impossible : l'avertissement reste, au plus prudent
-        found = ""
-    status = "found_in_sent" if found else "unknown"
+        kind, found = "", ""
+    # « Ce brouillon exact » seulement prouvé par son Message-ID ; une ressemblance n'est qu'un doublon possible.
+    status = {"identical": "found_in_sent", "similar": "similar_in_sent"}.get(kind, "unknown")
     result = {"status": status, "attempted_at": at, "warning": PREVIOUS_SEND[status].format(at=at)}
-    if found:
+    if status == "found_in_sent":
         result["messageId"] = found
+    elif status == "similar_in_sent":
+        result["similarId"] = found
     return result
+
+
+def _record(action: Callable[..., None], *args: Any) -> str:
+    """Écrit l'état des envois ; une panne locale (disque, verrou) n'efface jamais l'issue chez Gmail : rendue en
+    avertissement."""
+    try:
+        action(*args)
+    except Exception as exc:
+        return STATE_WARNING.format(error=type(exc).__name__)
+    return ""
 
 
 def send_draft(draftId: str, confirm: bool = False, accord: str = "") -> str:
@@ -1057,22 +1077,34 @@ def send_draft(draftId: str, confirm: bool = False, accord: str = "") -> str:
         refusal = ACCORDS.check(act, confirm, accord)
         if refusal:
             return _send_summary(draft, act, refusal)
-        attempted_at = int(time.time())
-        try:
-            sent = client.send_approved(draft)
-        except client.SendOutcomeUnknown:
-            envois.mark_unknown(draft["raw_sha256"], draftId, attempted_at)  # jamais relancé
-            return _dump({"status": "unknown", "code": "send_outcome_unknown", "sent": None,
-                          "message": UNKNOWN_SEND_NOTE})  # fmt: skip
-        envois.resolve(draft["raw_sha256"])
     except Exception as exc:
         return _error(exc)
+    sha = draft["raw_sha256"]
+    # Trace « tentative en cours » AVANT l'envoi : un arrêt brutal pendant messages.send laisse l'avertissement.
+    # Impossible à écrire : rien ne part (l'incertitude ne pourrait plus être signalée).
+    try:
+        new_trace = envois.mark_unknown(sha, draftId, int(time.time()))
+    except Exception as exc:
+        return _dump({"status": "error", "code": "state", "sent": False, "error": "could not record the send "
+                      f"attempt locally (envois.json, {type(exc).__name__}): nothing was sent"})  # fmt: skip
+    try:
+        sent = client.send_approved(draft)
+    except client.SendOutcomeUnknown:
+        result: dict[str, Any] = {"status": "unknown", "code": "send_outcome_unknown", "sent": None}
+        result["message"] = UNKNOWN_SEND_NOTE  # la trace écrite avant l'envoi reste : jamais relancé
+        return _dump(result)
+    except Exception as exc:  # refus net de Gmail, ou avant la requête : rien n'est parti CETTE fois
+        if new_trace:  # une incertitude plus ancienne sur ces octets reste signalée
+            _record(envois.resolve, sha)
+        return _error(exc)
+    warning = _record(envois.resolve, sha)
     return _dump(
         {
             "status": "success",
             "sent": True,
             "message": _clean_tree(sent),
             "draft": sent["draft"],
+            **({"state_warning": warning} if warning else {}),
             "note": DRAFT_KEPT_NOTE,
         }
     )

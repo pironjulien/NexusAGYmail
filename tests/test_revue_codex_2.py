@@ -71,8 +71,9 @@ def test_reponse_perdue_issue_inconnue_puis_avertie_et_retrouvee(gmail: FakeGmai
     assert "do not send it again" in data["message"].lower()
     assert len(gmail.sent) == 1 and gmail.kinds().count("message-send") == 1  # jamais relancé
     again = summary()
-    assert again["code"] == "confirmation" and "already" in again["previous_send"]["warning"], again
-    assert again["previous_send"]["status"] == "found_in_sent" and again["previous_send"]["messageId"] == "s1"
+    # Sans Message-ID dans le brouillon, la ressemblance n'est qu'un doublon possible (0.11.4).
+    assert again["code"] == "confirmation" and "possible duplicate" in again["previous_send"]["warning"], again
+    assert again["previous_send"]["status"] == "similar_in_sent" and again["previous_send"]["similarId"] == "s1"
     assert gmail.kinds().count("message-send") == 1
 
 
