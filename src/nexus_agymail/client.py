@@ -23,9 +23,10 @@ import time
 import weakref
 from collections.abc import Callable
 from email import message_from_bytes
-from email.header import decode_header, make_header
+from email.header import Header, decode_header, make_header
 from email.message import EmailMessage, Message
 from email.policy import compat32
+from email.policy import default as _READER_POLICY
 from email.utils import formataddr, getaddresses, parseaddr
 from typing import Any
 
@@ -433,6 +434,7 @@ _ADDRESS = re.compile(
     r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
 )
 _REPLY_PREFIX = re.compile(r"^\s*(?:re|ré|réf|aw|sv|vs)\s*:", re.IGNORECASE)
+_ENCODED_WORD = re.compile(r"=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=")  # mot encodé (RFC 2047 § 2)
 
 
 def plain_address(value: str) -> str:
@@ -459,12 +461,27 @@ def normalize_addresses(value: str, field: str, required: bool = False) -> str:
         except UnicodeError:
             ascii_domain = ""
         candidate = f"{local}@{ascii_domain}"
-        if not local or not ascii_domain or not _ADDRESS.match(candidate):
+        # mot encodé complet (RFC 2047) dans la partie locale : un client mail afficherait une autre adresse que celle
+        # validée (« =? » seul reste permis, c'est du dot-atom)
+        if not local or not ascii_domain or not _ADDRESS.match(candidate) or _ENCODED_WORD.search(local):
             raise ValueError(f"{field}: invalid address {address or value!r}")
-        clean.append(formataddr((name, candidate)))
+        # Nom lu une fois comme un lecteur de mail le lit (mots encodés décodés, Unicode autour gardé), blancs ramenés
+        # à une espace, nom vide retiré, puis réécrit : sinon la liste ne se relisait pas à l'identique (fuzzing).
+        if "=?" in name:
+            name = str(_READER_POLICY.header_factory("X-Name", name))
+        clean.append(_format_address(" ".join(name.split()), candidate))
     if not clean:
         raise ValueError(f"{field}: no valid address")
     return ", ".join(clean)
+
+
+def _format_address(name: str, address: str) -> str:
+    """« Nom <adresse> ». Un nom qui ressemble lui-même à un mot encodé est encodé (RFC 2047 § 5) : un lecteur le
+    décoderait sinon en un autre nom."""
+    if _ENCODED_WORD.search(name):
+        # plié par une espace, jamais par un saut de ligne (refusé dans un en-tête : relecture de Codex)
+        return f"{Header(name, 'utf-8').encode(linesep=' ')} <{address}>"
+    return formataddr((name, address))
 
 
 def _reply_context(svc: Any, reply_to_message_id: str, thread_id: str) -> dict[str, Any] | None:

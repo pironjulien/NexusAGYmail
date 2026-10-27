@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   removed; the others dismissed on GitHub with their reason.
 - Shared guard policy (`garde_fous.py`): lowercase Cyrillic and Greek look-alikes (в к м н т β η) are detected again.
 
+### Fixed
+- Recipient lists always read back the same and show what was checked (found by the new fuzzing): an address
+  whose local part contains a complete encoded word (`=?utf-8?q?…?=`) is refused, a display name is read once like
+  a mail reader does then written back (a name that literally looks like an encoded word is itself encoded), a blank
+  display name is dropped and tabs in a name become a space.
+
 ## [0.12.1] - 2026-10-27
 
 ### Added
