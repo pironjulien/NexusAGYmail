@@ -1,6 +1,6 @@
 {
   "name": "nexus-agymail",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "logo": "logo.png",
   "description": "Gmail of the signed-in account through the official API: search, read, attachments, drafts, labels, reversible trash, sending a draft only after the user's yes"
 }

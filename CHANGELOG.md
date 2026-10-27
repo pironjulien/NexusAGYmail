@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-10-27
+
+### Changed
+- Sharper Antigravity plugin logo (256 px): the julienpiron.fr medallion rebuilt at 600 px in the icon kit, sharp up to 512 px instead of a 240 px picture enlarged.
+
 ## [0.10.3] - 2026-10-26
 
 ### Added
