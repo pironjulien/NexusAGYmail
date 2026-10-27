@@ -27,6 +27,7 @@ from email.utils import getaddresses
 from typing import Annotated, Any, Required, TypedDict
 
 import anyio
+from mcp.server.caching import CacheHint
 from mcp.server.elicitation import render_elicitation_schema
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import (
@@ -133,9 +134,12 @@ ACCORDS = garde_fous.Accords()
 
 STARTUP: dict[str, Any] = {}
 
+# Liste des outils fixe pour une version : annoncée fraîche une minute (protocole 2026-07-28, cache privé). Icône et
+# site restent dans server.json (registre MCP) : aucun nom propre dans les sources (test d'hygiène).
 mcp = MCPServer(
     name="nexus-agymail",
     version=__version__,
+    cache_hints={"tools/list": CacheHint(ttl_ms=61_800, scope="private")},
     instructions=(
         "Gmail of the signed-in account through the official Gmail API (no browser): search threads (Gmail syntax, "
         "paged), read a message or a thread (quotes removed), new messages since the last check (list_new_messages), "

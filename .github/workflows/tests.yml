@@ -33,8 +33,11 @@ jobs:
 
   startup-linux:
     # What MCP directories (Glama) check in a Linux container: the server starts and lists its tools. The unit tests
-    # run there too: token storage (0600 file, flock) and attachments off Windows.
+    # run there too: token storage (0600 file, flock) and attachments off Windows. On every supported Python.
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.14", "3.15"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -42,6 +45,6 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       - name: initialize + tools/list over stdio, then the unit tests
         run: |
-          uv sync --frozen --quiet --python 3.14
+          uv sync --frozen --quiet --python ${{ matrix.python }}
           uv run --frozen pytest -q --noconftest tests/test_startup.py
           uv run --frozen pytest -q

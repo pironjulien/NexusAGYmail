@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-27
+
+### Added
+- The server announces how long its tool list stays fresh (one minute, private cache: MCP protocol 2026-07-28).
+
+### Changed
+- Minimum dependency versions raised to the ones the lock file already uses; the MCP SDK is capped below 3.
+- Python 3.15 is now tested (and listed) alongside 3.14.
+
 ## [0.11.5] - 2026-10-27
 
 ### Security
