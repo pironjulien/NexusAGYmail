@@ -75,7 +75,7 @@ def test_non_ou_fermeture_n_envoie_rien(gmail, mode, action, send, status):
     stored_draft(gmail, "d1", "Bonjour")
     data = call({"draftId": "d1"}, mode, Dialog(action, send))
     assert data["status"] == status and data["sent"] is False and "nothing was sent" in data["message"]
-    assert gmail.sent == [] and "draft-send" not in gmail.kinds()
+    assert gmail.sent == [] and "message-send" not in gmail.kinds()
 
 
 @pytest.mark.parametrize("mode", TRANSPORTS)

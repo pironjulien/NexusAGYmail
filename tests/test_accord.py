@@ -31,7 +31,7 @@ def send(draft_id: str = "d1", accord: str = "", confirm: bool = True) -> dict:
 
 
 def nothing_sent(gmail: FakeGmail) -> bool:
-    return gmail.sent == [] and "draft-send" not in gmail.kinds() and "envoi-direct" not in gmail.kinds()
+    return gmail.sent == [] and "message-send" not in gmail.kinds() and "draft-send" not in gmail.kinds()
 
 
 def html_draft(gmail: FakeGmail, draft_id: str, html: str) -> None:
@@ -81,7 +81,7 @@ def test_bon_jeton_envoie_une_fois(gmail):
     assert first["accord"] != second["accord"]  # un jeton par résumé
     data = send(accord=first["accord"])
     assert data["status"] == "success" and data["sent"] is True
-    assert gmail.kinds().count("draft-send") == 1 and len(gmail.sent) == 1
+    assert gmail.kinds().count("message-send") == 1 and len(gmail.sent) == 1
 
 
 def test_jeton_reutilise_refuse(gmail):
@@ -132,10 +132,14 @@ def test_copie_cachee_ajoutee(gmail):
 
 
 def set_to(gmail: FakeGmail, value: str) -> None:
-    """En-tête To écrit tel quel dans le brouillon stocké (comme un client mail laxiste)."""
-    for header in gmail.draft_store["d1"]["message"]["payload"]["headers"]:
+    """En-tête To écrit tel quel dans le brouillon stocké (comme un client mail laxiste), octets bruts compris."""
+    stored = gmail.draft_store["d1"]["message"]
+    for header in stored["payload"]["headers"]:
         if header["name"] == "To":
             header["value"] = value
+    head, sep, body = stored["_raw"].partition(b"\n\n")
+    lines = [b"To: " + value.encode() if line.startswith(b"To: ") else line for line in head.split(b"\n")]
+    stored["_raw"] = b"\n".join(lines) + sep + body
 
 
 def test_en_tete_illisible_compare_brut(gmail):
@@ -238,9 +242,11 @@ def test_mail_ordinaire_sans_avertissement(gmail):
 
 def test_un_seul_chemin_d_envoi():
     source = Path(client.__file__).read_text(encoding="utf-8")
-    assert source.count(".send(") == 1 and "drafts().send(" in source
-    for word in ("messages().send", "import_(", ".insert(", "forward"):
+    # Un seul envoi : les octets bruts approuvés d'un brouillon (send_approved), jamais un message composé ici.
+    assert source.count(".send(") == 1 and "messages().send(" in source and "drafts().send(" not in source
+    assert source.index("def send_approved(") < source.index("messages().send(")
+    for word in ("import_(", ".insert(", "forward"):
         assert word not in source, word
     server_source = Path(server.__file__).read_text(encoding="utf-8")
-    assert server_source.count("client.send_draft(") == 1
-    assert server_source.index("ACCORDS.check(") < server_source.index("client.send_draft(")
+    assert server_source.count("client.send_approved(") == 1
+    assert server_source.index("ACCORDS.check(") < server_source.index("client.send_approved(")

@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-27
+
+### Added
+- Local usage journal (`%LOCALAPPDATA%\NexusJournal\agymail\<ai>\<YYYY-MM>.jsonl`): one line per tool call (tool,
+  duration, outcome, stable error code), never an address, subject, body, label, ID or query. It never leaves the
+  PC; `NEXUS_JOURNAL=0` turns it off.
+
+### Security
+- Sending: the accord now keeps each recipient's role apart (To, Cc, Bcc), plus From, Reply-To and the SHA-256 of
+  the draft's raw bytes. Moving an address from Bcc to Cc, or changing From or Reply-To, after the summary voids the
+  accord; the summary and the confirmation dialog show From and Reply-To when the draft sets them.
+- Sending: the exact approved bytes are sent. The draft is read once in raw format (summary, accord and sent content
+  all come from those bytes), sent with `messages.send` in the same thread, then removed with `drafts.delete` only if
+  it is still identical; a draft changed after that read is kept, unsent, and reported (`draft: kept_changed`).
+  Before, `drafts.send` sent whatever the draft held at that moment. A send is never retried after an ambiguous
+  answer (5xx, network), only after a 429. Malformed address headers are read without loss (shown and compared as
+  written).
+- `send_draft`: `confirm` and the dialog's `send` are strict booleans: `1`, `"yes"`, `"on"` or `"true"` no longer
+  send.
+
+### Fixed
+- `list_new_messages`: no message lost when a page was partial (`more`) and the history then expired. The saved date
+  bound only moves forward once the cursor has caught up; each position handed out keeps its own bound, so an old
+  `startHistoryId` given explicitly is caught up by date too instead of restarting from now.
+- `history.json`: every read and read-modify-write is locked across threads and processes (lock file), and written
+  through a uniquely named temporary file.
+
+### Tests
+- The fake Gmail API now really filters `messages.list` by `q` (`after:`/`before:`) and `labelIds`, and fails on any
+  other query term; new routes `messages.send` and `drafts.delete`.
+
 ## [0.11.1] - 2026-10-27
 
 ### Added

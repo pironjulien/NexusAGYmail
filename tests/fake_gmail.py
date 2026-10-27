@@ -1,15 +1,20 @@
 """Fausse API Gmail au niveau HTTP (aucun réseau) : le vrai client google-api-python-client la parle.
 
-Elle sert les routes utilisées : messages (list, get, attachments.get, batchModify, modify, trash, untrash), threads
-(list, get, modify, trash, untrash), labels (list, create), drafts (list, create, get, update, send), profil et
-historique (getProfile, history.list), envoi reprenable (/upload/) et lots /batch/gmail/v1 ; avec pagination, format metadata/full, et des pannes programmables (429, 5xx)
-pour vérifier les relances.
+Elle sert les routes utilisées : messages (list filtré par `q` after:/before: et labelIds, get, attachments.get,
+batchModify, modify, trash, untrash, send), threads (list, get, modify, trash, untrash), labels (list, create), drafts
+(list, create, get, update, send, delete), profil et historique (getProfile, history.list), envoi reprenable (/upload/)
+et lots /batch/gmail/v1 ; avec pagination, format metadata/full/raw, des pannes programmables (429, 5xx) pour vérifier
+les relances, et des crochets `after` (fonction appelée une fois juste après une requête d'un type donné) pour
+simuler un changement concurrent.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import re
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from email import message_from_bytes
 from email.message import EmailMessage, Message
@@ -174,6 +179,7 @@ class FakeGmail:
         self.history_id = 1000  # historyId courant de la boîte
         self.history_floor = 0  # positions plus anciennes : expirées (404)
         self.history: list[dict[str, Any]] = []
+        self.after: dict[str, Callable[[], None]] = {}  # crochet à usage unique, par type de requête
 
     def kinds(self) -> list[str]:
         return [kind for kind, _ in self.calls]
@@ -184,6 +190,7 @@ class FakeGmail:
 
     def receive(self, msg: dict[str, Any]) -> str:
         """Message arrivé dans la boîte : ajouté et inscrit dans l'historique (messageAdded). Rend son historyId."""
+        msg.setdefault("internalDate", str(int(time.time() * 1000)))  # date de réception, comme Gmail
         self.add(msg)
         self.history_id += 1
         added = {"id": msg["id"], "threadId": msg["threadId"], "labelIds": list(msg["labelIds"])}
@@ -206,6 +213,10 @@ class FakeGmail:
         status, data = self._route(method, uri, body)
         return self._response(status), json.dumps(data).encode("utf-8")
 
+    def _hook(self, kind: str) -> None:
+        if hook := self.after.pop(kind, None):
+            hook()
+
     def _upload(self, uri: str, method: str, body: Any) -> tuple[Any, bytes]:
         """Envoi reprenable : POST/PUT de session (métadonnées JSON), puis PUT du message entier (message/rfc822),
         rejoué comme drafts.create / drafts.update avec le raw équivalent."""
@@ -220,8 +231,11 @@ class FakeGmail:
         if hasattr(body, "read"):  # tranche de flux envoyée par googleapiclient
             body = body.read()
         raw = body if isinstance(body, bytes) else str(body).encode("utf-8")
-        message = dict(metadata.get("message") or {}, raw=b64(raw))
-        status, data = self._route(method0, API + route, json.dumps({**metadata, "message": message}))
+        if route.endswith("/messages/send"):  # messages.send : les métadonnées sont le message lui-même
+            payload = {**metadata, "raw": b64(raw)}
+        else:
+            payload = {**metadata, "message": dict(metadata.get("message") or {}, raw=b64(raw))}
+        status, data = self._route(method0, API + route, json.dumps(payload))
         return self._response(status), json.dumps(data).encode("utf-8")
 
     # --- routes
@@ -234,6 +248,8 @@ class FakeGmail:
     def _kind(method: str, segments: list[str]) -> str:
         resource, count = segments[0], len(segments)
         last = segments[-1]
+        if method == "DELETE" and resource == "drafts" and count == 2:
+            return "draft-delete"  # brouillon retiré après l'envoi de son contenu approuvé
         if method == "DELETE" or "batchDelete" in segments:
             return "suppression"  # jamais appelée : vérifiée par les tests
         table = {
@@ -259,7 +275,7 @@ class FakeGmail:
         if method == "POST" and resource == "messages" and last == "batchModify":
             return "batchModify"
         if method == "POST" and resource == "messages" and last == "send":
-            return "envoi-direct"  # jamais appelé : vérifié par les tests
+            return "message-send"
         if method == "POST" and count == 3 and last in ("modify", "trash", "untrash"):
             return f"{resource[:-1]}-{last}"
         return "autre"
@@ -279,7 +295,7 @@ class FakeGmail:
             }
         if kind == "list":
             self.list_params.append(query)
-            ids = sorted(self.messages)
+            ids = sorted(i for i, m in self.messages.items() if self._matches(m, query))
             start = int(query.get("pageToken", ["0"])[0])
             size = int(query.get("maxResults", ["100"])[0])
             page = ids[start : start + size]
@@ -308,6 +324,22 @@ class FakeGmail:
             stored = self.add_draft(draft_id, draft_message(f"dm{len(self.drafts)}", draft["message"]))
             return 200, {"id": draft_id, "message": {"id": stored["id"], "threadId": stored["threadId"]}}
         return self._route_more(kind, segments, query, body)
+
+    @staticmethod
+    def _matches(msg: dict[str, Any], query: dict[str, list[str]]) -> bool:
+        """Filtre de messages.list : chaque libellé de labelIds, et les termes after:/before: (secondes epoch, comparées
+        à internalDate) de `q`. Un autre terme fait échouer le test plutôt que d'être ignoré en silence."""
+        if any(label not in msg["labelIds"] for label in query.get("labelIds", [])):
+            return False
+        received = int(msg.get("internalDate") or 0) // 1000
+        for term in " ".join(query.get("q", [])).split():
+            match = re.fullmatch(r"(after|before):(\d+)", term)
+            if not match:
+                raise AssertionError(f"fake Gmail: unsupported query term {term!r}")
+            bound = int(match.group(2))
+            if (match.group(1) == "after" and received < bound) or (match.group(1) == "before" and received >= bound):
+                return False
+        return True
 
     def _missing(self) -> tuple[int, dict[str, Any]]:
         return 404, {"error": {"code": 404, "message": "Requested entity was not found."}}
@@ -398,7 +430,22 @@ class FakeGmail:
             draft = self.draft_store.get(segments[1])
             if draft is None:
                 return self._missing()
-            return 200, {"id": draft["id"], "message": self._format(draft["message"], query)}
+            answer = {"id": draft["id"], "message": self._format(draft["message"], query)}
+            self._hook(kind)  # changement concurrent APRÈS la lecture rendue
+            return 200, answer
+        if kind == "draft-delete":
+            if self.draft_store.pop(segments[1], None) is None:
+                return self._missing()
+            return 204, {}
+        if kind == "message-send":
+            raw = base64.urlsafe_b64decode(data["raw"] + "=" * (-len(data["raw"]) % 4))
+            sent = draft_message(f"s{len(self.sent) + 1}", {"raw": data["raw"], "threadId": data.get("threadId")})
+            sent["threadId"] = data.get("threadId") or sent["id"]
+            sent["labelIds"] = ["SENT"]
+            sent["_raw"] = raw
+            self.sent.append(sent)
+            self.add(sent)
+            return 200, {"id": sent["id"], "threadId": sent["threadId"], "labelIds": sent["labelIds"]}
         if kind == "draft-update":
             draft = self.draft_store.get(segments[1])
             if draft is None:

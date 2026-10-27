@@ -25,6 +25,8 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("NEXUS_AGYMAIL_HOME", str(home / ".nexus" / "nexus-agymail"))
     monkeypatch.delenv("NEXUS_AGYMAIL_ACCOUNT", raising=False)
+    monkeypatch.setenv("NEXUS_JOURNAL_HOME", str(home / "journal"))  # jamais le vrai journal commun
+    monkeypatch.delenv("NEXUS_AGENT", raising=False)
     return home
 
 

@@ -132,9 +132,14 @@ filters or signature, another Google account).
   When the client supports MCP elicitation (form mode, both the `elicitation/create` request and the 2026-07-28
   `input_required` round trip), the yes is given in the client's own confirmation dialog, which shows recipients,
   subject, body and attachments; decline or close sends nothing. Otherwise `send_draft(draftId, confirm=true,
-  accord=<token>)`. Either way the yes is a single-use accord (10 minutes) bound to the exact draft: recipients (to, cc, bcc), subject, full body, every part (HTML included) and the SHA-256 of each
-  attachment. The draft is read again just before sending: if anything changed, nothing is sent and a new summary is
-  returned. `drafts.send` is the only sending call: no direct sending without a draft.
+  accord=<token>)`. Only a real `true` counts (not `1`, `"yes"` or `"on"`). Either way the yes is a single-use
+  accord (10 minutes) bound to the exact draft: each recipient with its role (to, cc, bcc kept apart), From,
+  Reply-To, subject, full body, every part (HTML included), the SHA-256 of each attachment and of the draft's raw
+  bytes. The draft is read once in raw format just before sending: if anything changed, nothing is sent and a new
+  summary is returned. Otherwise those exact approved bytes are sent (`messages.send`, same thread), then the draft
+  is removed if it is still identical; a draft changed in the meantime is kept, unsent, and reported. A change made
+  after that last read can never go out in place of what was approved. A send is never retried after an ambiguous
+  answer (5xx, network), only after a 429. No direct sending without a draft.
 - **Provenance**: a recipient found in an email the agent read is flagged in the summary (`provenance`): allowed only
   if the user asked for it.
 - **Prompt injection**: subject, snippet, body, addresses and attachment names are returned framed as
@@ -185,7 +190,10 @@ latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
   writes `~/.nexus/status/agymail.json` (installed and latest version, last check time) for the Nexus app. Attachments you ask
   it to save go to `~/Downloads/NexusAGYmail` (or the folder given). In memory only, for the life of the server: the
   pending send accords and the addresses seen in emails read (for the `provenance` warning). No email is written to
-  disk unless saved as an attachment; no log of emails is kept.
+  disk unless saved as an attachment; no log of emails is kept. A local usage journal
+  (`%LOCALAPPDATA%\NexusJournal\agymail\<ai>\<YYYY-MM>.jsonl`, kept 13 months) records one line per tool call: tool
+  name, duration, outcome and a stable error code (`quota`, `network`...), never an address, subject, body, label, ID
+  or query. It never leaves the PC; `NEXUS_JOURNAL=0` turns it off.
 - **Removing it**: delete `~/.nexus/nexus-agymail/` and, for Antigravity, `~/.gemini/config/plugins/nexus-agymail/`;
   revoke the access in your [Google account](https://myaccount.google.com/connections) and delete your Google Cloud
   project if you no longer need it.

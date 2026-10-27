@@ -1,7 +1,9 @@
 """Client de l'API Gmail v1 : recherche, lecture, fils, brouillons, libellés, rangement, corbeille, envoi confirmé.
 
-Aucune suppression définitive : ni delete, ni batchDelete, ni vidage de corbeille (la portée gmail.modify ne les
-permet d'ailleurs pas). L'envoi ne passe que par un brouillon existant (drafts.send), après confirmation.
+Aucune suppression définitive de message : ni messages.delete, ni batchDelete, ni vidage de corbeille (la portée
+gmail.modify ne les permet d'ailleurs pas). L'envoi ne part que d'un brouillon existant, après confirmation : ses
+octets exacts, lus une fois en format raw et approuvés, sont envoyés tels quels (messages.send, même fil), puis le
+brouillon est retiré (drafts.delete) s'il n'a pas changé entre-temps, comme drafts.send l'aurait fait.
 
 Chaque requête est relancée avec attente exponentielle sur 429 et 5xx (num_retries de google-api-python-client) ;
 les requêtes groupées (BatchHttpRequest) relancent elles-mêmes les seuls éléments refusés pour quota.
@@ -19,7 +21,10 @@ import socket
 import time
 import weakref
 from collections.abc import Callable
-from email.message import EmailMessage
+from email import message_from_bytes
+from email.header import decode_header, make_header
+from email.message import EmailMessage, Message
+from email.policy import compat32
 from email.utils import formataddr, getaddresses, parseaddr
 from typing import Any
 
@@ -33,6 +38,7 @@ from . import fichiers, mime
 from .auth import REAUTH_HINT, GmailAuthError, get_credentials
 
 NUM_RETRIES = 5
+SIMPLE_UPLOAD_LIMIT = 4_000_000  # octets envoyés en JSON (raw) ; au-delà, envoi reprenable (Gmail : 5 Mo en simple)
 MAX_RESULTS_LIMIT = 100
 THREADS_LIMIT = 50  # comme search_threads du serveur Gmail officiel
 THREAD_MESSAGES = 5  # messages résumés par fil dans une recherche (les plus récents)
@@ -754,12 +760,125 @@ def update_draft(
     return _draft_result(updated, msg, subject, "draft_updated")
 
 
-def send_draft(draft_id: str, service: Any = None) -> dict[str, Any]:
-    """Envoie un brouillon existant (drafts.send). Seul chemin d'envoi : aucun envoi direct sans brouillon."""
+def _header_text(value: Any) -> str:
+    """Valeur d'en-tête lisible et SANS PERTE : mots encodés (RFC 2047) décodés, lignes repliées jointes ; une adresse
+    mal formée reste écrite telle quelle (l'analyseur moderne la viderait), pour être montrée et comparée."""
+    if value is None:
+        return ""
+    text = str(value)
+    if any("\udc80" <= c <= "\udcff" for c in text):  # octets 8 bits bruts : UTF-8, sinon remplacés
+        text = text.encode("ascii", "surrogateescape").decode("utf-8", "replace")
+    try:
+        text = str(make_header(decode_header(text)))
+    except LookupError, UnicodeError, ValueError:
+        pass
+    return re.sub(r"\r?\n[ \t]+", " ", text)
+
+
+def _payload_from(part: Message, part_id: str = "") -> dict[str, Any]:
+    """Partie MIME (analysée depuis les octets bruts) au format payload de Gmail (format full) : partId, en-têtes
+    décodés sans perte, contenu en ligne. Un message joint (message/rfc822) est relu dans le brut, octets d'origine."""
+    headers = [{"name": str(k), "value": _header_text(v)} for k, v in part.items()]
+    mime_type = part.get_content_type()
+    node: dict[str, Any] = {"partId": part_id, "mimeType": mime_type, "filename": _header_text(part.get_filename())}
+    node["headers"] = headers
+    inner: Any = part.get_payload()
+    if mime_type == "message/rfc822":
+        size = len(inner[0].as_bytes()) if isinstance(inner, list) and inner else 0
+        return {**node, "body": {"size": size}}
+    if isinstance(inner, list):
+        children = [
+            _payload_from(child, f"{part_id}.{index}" if part_id else str(index))
+            for index, child in enumerate(inner)
+            if isinstance(child, Message)
+        ]
+        return {**node, "body": {"size": 0}, "parts": children}
+    data = part.get_payload(decode=True)
+    data = data if isinstance(data, bytes) else b""
+    return {**node, "body": {"size": len(data), "data": base64.urlsafe_b64encode(data).decode("ascii")}}
+
+
+def read_draft_exact(draft_id: str, service: Any = None) -> dict[str, Any]:
+    """Brouillon lu UNE fois, en format raw : le résumé montré (en-têtes, texte, pièces jointes et leur empreinte),
+    l'accord et les octets envoyés par send_approved viennent tous de ces mêmes octets (`raw`, `raw_sha256`)."""
     draft_id = _draft_id(draft_id)
     svc = service or get_service()
-    sent = _execute(svc.users().drafts().send(userId="me", body={"id": draft_id}))
-    return {"id": sent.get("id"), "threadId": sent.get("threadId"), "labels": sent.get("labelIds", [])}
+    draft = _execute(svc.users().drafts().get(userId="me", id=draft_id, format="raw"))
+    message = draft.get("message") or {}
+    raw = mime.b64decode(str(message.get("raw") or ""))
+    if not raw:
+        raise GmailApiError("the draft has no content (raw format empty): nothing was sent")
+    payload = _payload_from(message_from_bytes(raw, policy=compat32))
+    headers = payload["headers"]
+    result: dict[str, Any] = {
+        "id": draft.get("id"),
+        "messageId": message.get("id"),
+        "threadId": message.get("threadId"),
+    }
+    for key, name in (("date", "Date"), ("from", "From"), ("replyTo", "Reply-To"), ("to", "To"), ("cc", "Cc"),
+                      ("bcc", "Bcc"), ("subject", "Subject"), ("inReplyTo", "In-Reply-To"),
+                      ("references", "References")):  # fmt: skip
+        result[key] = mime.header(headers, name)
+    result.update(mime.extract(payload))
+    result["parts_digest"] = parts_digest(payload)
+    whole = _RawMessage(svc, str(message.get("id") or ""))
+    whole.raw = raw  # aucune autre lecture : les pièces jointes viennent du même brut
+    pairs = [
+        (mime.attachment_info(ref, part), _part_bytes(svc, "", ref, part, whole))
+        for ref, part in mime.attachment_parts(payload)
+    ]
+    result["attachments"] = [{**info, "sha256": hashlib.sha256(data).hexdigest()} for info, data in pairs]
+    result["multipart"] = str(payload["mimeType"]).startswith("multipart/")
+    result["raw"] = raw
+    result["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+    return result
+
+
+def _execute_send(request: Any) -> Any:
+    """Un envoi n'est jamais rejoué après une réponse ambiguë (5xx, réseau) : il a pu partir. Seul un 429 (refusé
+    avant tout traitement) est relancé."""
+    for attempt in range(NUM_RETRIES + 1):
+        try:
+            return request.execute(num_retries=0)
+        except HttpError as exc:
+            if _status(exc) != 429 or attempt == NUM_RETRIES:
+                raise
+        _sleep(_backoff(attempt + 1))
+    raise AssertionError("unreachable")
+
+
+def send_approved(approved: dict[str, Any], service: Any = None) -> dict[str, Any]:
+    """Envoie les octets exacts du brouillon approuvé (lus par read_draft_exact), dans son fil, puis retire le
+    brouillon s'il est encore identique à ces octets ; modifié entre-temps, il est gardé (`draft`: kept_changed).
+
+    Seul chemin d'envoi, et seulement depuis un brouillon : aucun envoi d'un message composé ici."""
+    draft_id = _draft_id(str(approved.get("id") or ""))
+    raw: bytes = approved["raw"]
+    if hashlib.sha256(raw).hexdigest() != approved.get("raw_sha256"):
+        raise GmailApiError("approved content altered before sending: nothing was sent")
+    svc = service or get_service()
+    body: dict[str, Any] = {"threadId": approved["threadId"]} if approved.get("threadId") else {}
+    media = None
+    if approved.get("multipart") or len(raw) > SIMPLE_UPLOAD_LIMIT:  # comme les brouillons : envoi reprenable
+        media = MediaIoBaseUpload(io.BytesIO(raw), mimetype="message/rfc822", resumable=True)
+    else:
+        body["raw"] = base64.urlsafe_b64encode(raw).decode("ascii")
+    sent = _execute_send(svc.users().messages().send(userId="me", body=body, media_body=media))
+    state = "deleted"
+    try:
+        current = _execute(svc.users().drafts().get(userId="me", id=draft_id, format="raw"))
+        if mime.b64decode(str((current.get("message") or {}).get("raw") or "")) != raw:
+            state = "kept_changed"
+        else:
+            _execute(svc.users().drafts().delete(userId="me", id=draft_id))
+    except Exception:
+        state = "kept_error"  # le message est parti ; le brouillon reste, à retirer à la main
+    return {
+        "id": sent.get("id"),
+        "threadId": sent.get("threadId"),
+        "labels": sent.get("labelIds", []),
+        "draft": state,
+    }
 
 
 # --- libellés, rangement, corbeille
