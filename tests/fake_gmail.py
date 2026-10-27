@@ -1,8 +1,8 @@
 """Fausse API Gmail au niveau HTTP (aucun réseau) : le vrai client google-api-python-client la parle.
 
 Elle sert les routes utilisées : messages (list, get, attachments.get, batchModify, modify, trash, untrash), threads
-(list, get, modify, trash, untrash), labels (list, create), drafts (list, create, get, update, send), envoi reprenable
-(/upload/) et lots /batch/gmail/v1 ; avec pagination, format metadata/full, et des pannes programmables (429, 5xx)
+(list, get, modify, trash, untrash), labels (list, create), drafts (list, create, get, update, send), profil et
+historique (getProfile, history.list), envoi reprenable (/upload/) et lots /batch/gmail/v1 ; avec pagination, format metadata/full, et des pannes programmables (429, 5xx)
 pour vérifier les relances.
 """
 
@@ -171,6 +171,9 @@ class FakeGmail:
         self.sent: list[dict[str, Any]] = []
         self.blobs: dict[str, bytes] = {}  # contenu des pièces jointes servies par attachments.get
         self.sessions: dict[str, tuple[str, str, dict[str, Any]]] = {}
+        self.history_id = 1000  # historyId courant de la boîte
+        self.history_floor = 0  # positions plus anciennes : expirées (404)
+        self.history: list[dict[str, Any]] = []
 
     def kinds(self) -> list[str]:
         return [kind for kind, _ in self.calls]
@@ -178,6 +181,14 @@ class FakeGmail:
     def add(self, msg: dict[str, Any]) -> None:
         self.messages[msg["id"]] = msg
         self.threads.setdefault(msg["threadId"], []).append(msg["id"])
+
+    def receive(self, msg: dict[str, Any]) -> str:
+        """Message arrivé dans la boîte : ajouté et inscrit dans l'historique (messageAdded). Rend son historyId."""
+        self.add(msg)
+        self.history_id += 1
+        added = {"id": msg["id"], "threadId": msg["threadId"], "labelIds": list(msg["labelIds"])}
+        self.history.append({"id": str(self.history_id), "messages": [added], "messagesAdded": [{"message": added}]})
+        return str(self.history_id)
 
     def service(self) -> Any:
         return build("gmail", "v1", http=self, cache_discovery=False, static_discovery=True)
@@ -231,6 +242,8 @@ class FakeGmail:
             ("GET", "threads", 1): "thread-list",
             ("GET", "threads", 2): "thread",
             ("GET", "labels", 1): "labels",
+            ("GET", "profile", 1): "profile",
+            ("GET", "history", 1): "history",
             ("POST", "labels", 1): "label-create",
             ("POST", "drafts", 1): "draft",
             ("GET", "drafts", 1): "drafts",
@@ -313,6 +326,26 @@ class FakeGmail:
             if start + size < len(ids):
                 listing["nextPageToken"] = str(start + size)
             return 200, listing
+        if kind == "profile":
+            return 200, {"emailAddress": "test@example.com", "historyId": str(self.history_id), "messagesTotal": 0}
+        if kind == "history":
+            self.list_params.append(query)
+            start = int(query["startHistoryId"][0])
+            if start < self.history_floor:
+                return 404, {"error": {"code": 404, "message": "Requested entity was not found."}}
+            label = query.get("labelId", [""])[0]
+            records = [
+                r for r in self.history
+                if int(r["id"]) > start and (not label or label in r["messagesAdded"][0]["message"]["labelIds"])
+            ]  # fmt: skip
+            first = int(query.get("pageToken", ["0"])[0])
+            size = int(query.get("maxResults", ["100"])[0])
+            history: dict[str, Any] = {"historyId": str(self.history_id)}
+            if records[first : first + size]:
+                history["history"] = records[first : first + size]
+            if first + size < len(records):
+                history["nextPageToken"] = str(first + size)
+            return 200, history
         if kind == "attachment":
             blob = self.blobs.get(segments[3])
             if blob is None:

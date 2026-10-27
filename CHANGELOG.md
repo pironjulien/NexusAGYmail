@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-27
+
+### Added
+- Native send confirmation (MCP form elicitation): when the client supports it, `send_draft(draftId)` opens the
+  client's confirmation dialog with recipients, subject, body (1,618 characters) and attachments; yes sends, decline
+  or close sends nothing. Both transports of the mcp 2.3 SDK are served: the `elicitation/create` request (revisions
+  up to 2025-11-25) and the 2026-07-28 `input_required` round trip (state sealed by the SDK). The yes is still a
+  single-use accord bound to what the dialog showed: the draft is read again before sending and any change voids it
+  (new summary). Clients without elicitation, or a failed dialog, fall back to the unchanged `accord` token; a token
+  given with `confirm=true` opens no dialog.
+- Structured output: a real `outputSchema` and `structuredContent` for `search_threads`, `get_message`,
+  `get_thread`, `list_new_messages`, `list_labels`, `list_drafts`, `get_draft` and `auth_status` (the same object as
+  the JSON text, kept for older clients); errors set `isError`. Action tools return text only, without the former
+  opaque `{"result": string}` schema.
+- `list_new_messages` tool: messages that arrived since the previous call, from Gmail history
+  (`users.history.list`, `messageAdded`), oldest first, without bodies. The position (`historyId`) is remembered per
+  account and label in `history.json` in the state folder; the first call only sets it; pages (`pageSize`, `more`),
+  peek without moving (`advance=false`), resume from a `startHistoryId`. Expired history (404, about a week): the
+  messages since the last check are found by date (`after:`, `mode: catch_up`), or it restarts from now when no date
+  is known (`mode: reset`). Drafts, spam and trash are never listed.
+
 ## [0.10.4] - 2026-10-27
 
 ### Changed

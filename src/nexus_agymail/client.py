@@ -234,6 +234,99 @@ def get_thread(thread_id: str, service: Any = None) -> dict[str, Any]:
     return {"id": thread.get("id"), "messages": [_full(m, drop_quotes=True) for m in thread.get("messages") or []]}
 
 
+# --- suivi incrémental (users.history.list)
+
+HISTORY_PAGE = 500  # enregistrements par page d'historique (maximum de l'API)
+SKIPPED_LABELS = frozenset({"DRAFT", "SPAM", "TRASH"})  # jamais des « nouveaux messages »
+
+
+class HistoryExpired(Exception):
+    """Position d'historique trop ancienne ou invalide (404 de users.history.list) : repartir de maintenant."""
+
+
+def get_profile(service: Any = None) -> dict[str, Any]:
+    """Adresse du compte et historyId courant de la boîte (users.getProfile)."""
+    svc = service or get_service()
+    profile = _execute(svc.users().getProfile(userId="me"))
+    return {"emailAddress": str(profile.get("emailAddress") or ""), "historyId": str(profile.get("historyId") or "")}
+
+
+def _kept(labels: Any) -> bool:
+    return not SKIPPED_LABELS & set(labels or [])
+
+
+def list_history(
+    start_history_id: str, label_id: str = "INBOX", limit: int = 20, service: Any = None
+) -> dict[str, Any]:
+    """Messages ajoutés depuis start_history_id (exclu), dans l'ordre d'arrivée, enregistrements entiers.
+
+    Au plus `limit` messages (un enregistrement n'est jamais coupé) : s'il en reste, `more` et la position rendue est
+    celle du dernier enregistrement lu ; sinon la position courante de la boîte. HistoryExpired si Gmail ne connaît
+    plus la position (historique gardé au moins une semaine environ, parfois moins)."""
+    svc = service or get_service()
+    start = str(start_history_id or "").strip()
+    if not start.isdigit():
+        raise ValueError(f"startHistoryId must be a number, got {start!r}")
+    count = clamp_max_results(limit)
+    params: dict[str, Any] = {
+        "userId": "me",
+        "startHistoryId": start,
+        "historyTypes": ["messageAdded"],
+        "maxResults": HISTORY_PAGE,
+    }
+    if label_id:
+        params["labelId"] = label_id
+    ids: list[str] = []
+    while True:
+        try:
+            page = _execute(svc.users().history().list(**params))
+        except HttpError as exc:
+            if _status(exc) == 404:
+                raise HistoryExpired(f"history position {start} is too old or unknown") from exc
+            raise
+        records = page.get("history") or []
+        for index, record in enumerate(records):
+            for added in record.get("messagesAdded") or []:
+                msg = added.get("message") or {}
+                if msg.get("id") and msg["id"] not in ids and _kept(msg.get("labelIds")):
+                    ids.append(msg["id"])
+            left = index + 1 < len(records) or bool(page.get("nextPageToken"))
+            if len(ids) >= count and left:
+                return {"ids": ids, "historyId": str(record.get("id") or start), "more": True}
+        if not page.get("nextPageToken"):
+            return {"ids": ids, "historyId": str(page.get("historyId") or start), "more": False}
+        params["pageToken"] = page["nextPageToken"]
+
+
+def messages_since(after_epoch: int, label_id: str = "INBOX", limit: int = 20, service: Any = None) -> dict[str, Any]:
+    """Repli quand l'historique a expiré : messages reçus depuis une date (recherche `after:`), plus récents
+    d'abord, au plus `limit`."""
+    svc = service or get_service()
+    params: dict[str, Any] = {"userId": "me", "q": f"after:{int(after_epoch)}", "maxResults": clamp_max_results(limit)}
+    if label_id:
+        params["labelIds"] = [label_id]
+    page = _execute(svc.users().messages().list(**params))
+    ids = [ref["id"] for ref in page.get("messages") or [] if ref.get("id")]
+    return {"ids": ids, "more": bool(page.get("nextPageToken"))}
+
+
+def summaries(ids: list[str], service: Any = None) -> list[dict[str, Any]]:
+    """Résumés (sans corps) dans l'ordre donné ; un message supprimé entre-temps (404), en brouillon, spam ou
+    corbeille est omis."""
+    svc = service or get_service()
+    found, failures = _batch_run(
+        svc,
+        ids,
+        lambda message_id: (
+            svc.users().messages().get(userId="me", id=message_id, format="metadata", metadataHeaders=SUMMARY_HEADERS)
+        ),
+    )
+    for failure in failures.values():
+        if not (isinstance(failure, HttpError) and _status(failure) == 404):
+            raise failure
+    return [_summary(found[i]) for i in ids if i in found and _kept(found[i].get("labelIds"))]
+
+
 # --- pièces jointes
 
 

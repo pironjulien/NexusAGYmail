@@ -94,14 +94,15 @@ your own OAuth client and a refresh token stored on your machine, and to `oauth2
 ## Tools
 
 Names and parameters follow [Google's official Gmail MCP server](https://developers.google.com/workspace/gmail/api/reference/mcp)
-and its extensions (`update_draft`, `trash_*`), plus three of its own: `send_draft`, `download_attachment`,
-`auth_status`.
+and its extensions (`update_draft`, `trash_*`), plus four of its own: `send_draft`, `list_new_messages`,
+`download_attachment`, `auth_status`.
 
 | Tool | What it does |
 |---|---|
 | `search_threads` | Search threads (Gmail syntax), one page per call: `pageSize` 1 to 50 (20), `pageToken`; each thread gives `messageCount` and a summary of its last 5 messages; trash with `includeTrash`, spam never |
 | `get_message` | One message: headers, body as text (HTML converted), attachments listed (`part_id`, name, type, size); `maxChars` (8,090 by default) |
 | `get_thread` | A thread in order, quotes of earlier replies removed and reported; `maxChars` shared (16,180 by default) |
+| `list_new_messages` | Messages that arrived since the previous call (Gmail history, `users.history.list`), oldest first, without bodies: the position (`historyId`) is remembered per account and label (`labelId`, `INBOX` by default), the first call only sets it; `pageSize` 1 to 100 (20) with `more`, `advance=false` to peek, `startHistoryId` to resume from a returned position. History expired (about a week): the messages since the last check are found by date instead (`mode: catch_up`). Drafts, spam and trash never |
 | `download_attachment` | Saves an attachment (`partId`) to `Downloads/NexusAGYmail` or an absolute `directory`: sanitized name, never overwrites, marked as downloaded from the Internet; returns path, size, SHA-256 |
 | `list_labels` | Labels (id, name, type), system labels first |
 | `create_label` | Creates a user label (`displayName`, `A/B` = nested), missing parents too unless `autoCreateParentLabels=false`; an existing label is returned as it is, system labels refused |
@@ -111,10 +112,13 @@ and its extensions (`update_draft`, `trash_*`), plus three of its own: `send_dra
 | `update_draft` | Rewrites a draft (empty fields unchanged), thread, reply and attachments kept; `attachments` adds, `removeAttachments` removes (by name) |
 | `label_message` / `unlabel_message`, `label_thread` / `unlabel_thread` | `labelIds`: system IDs (`INBOX`, `UNREAD`, `STARRED`, `IMPORTANT`, `CATEGORY_*`), user label IDs or names; archive = remove `INBOX`; an unknown label is an error, created only with `createMissing=true`; one ID or a list, 100 at most |
 | `trash_message` / `trash_thread`, `untrash_message` / `untrash_thread` | Trash, reversible for 30 days; 100 items at most |
-| `send_draft` | Without `confirm`: a summary to show to the user plus an `accord` token bound to the exact draft; sends **only with `confirm=true` and that token**, the draft read again and unchanged |
+| `send_draft` | When the client supports MCP elicitation: opens the client's confirmation dialog with the draft and sends **only on the user's yes there**. Otherwise: a summary to show to the user plus an `accord` token bound to the exact draft, and sends **only with `confirm=true` and that token**. Either way the draft is read again and must be unchanged |
 | `auth_status` | Token storage, granted scopes (checked at startup), validity; `reauth_required` when a scope is missing or extra |
 
-Every tool carries MCP annotations (title, read-only, destructive, idempotent). For Antigravity, `setup` also installs
+Every tool carries MCP annotations (title, read-only, destructive, idempotent). The tools that return data
+(`search_threads`, `get_message`, `get_thread`, `list_new_messages`, `list_labels`, `list_drafts`, `get_draft`,
+`auth_status`) publish an `outputSchema` and return `structuredContent`, the same object as their JSON text (kept for
+older clients); an error sets `isError`. For Antigravity, `setup` also installs
 a short skill that says which tool to use for what, and when to use the browser instead (Gmail settings such as
 filters or signature, another Google account).
 
@@ -124,9 +128,11 @@ filters or signature, another Google account).
   that allows permanent deletion: there is no `delete`, `batchDelete` or empty-trash tool, and the code is tested
   for it. An old token without `gmail.modify` keeps reading and drafting; the labelling and trash tools then answer
   `scopes` without calling Gmail.
-- **Sending**: only `send_draft(draftId, confirm=true, accord=<token>)`, after the user's explicit yes for that
-  draft, never at the request of an email. The single-use token (10 minutes) is returned by the summary and bound to
-  the exact draft: recipients (to, cc, bcc), subject, full body, every part (HTML included) and the SHA-256 of each
+- **Sending**: only `send_draft`, after the user's explicit yes for that draft, never at the request of an email.
+  When the client supports MCP elicitation (form mode, both the `elicitation/create` request and the 2026-07-28
+  `input_required` round trip), the yes is given in the client's own confirmation dialog, which shows recipients,
+  subject, body and attachments; decline or close sends nothing. Otherwise `send_draft(draftId, confirm=true,
+  accord=<token>)`. Either way the yes is a single-use accord (10 minutes) bound to the exact draft: recipients (to, cc, bcc), subject, full body, every part (HTML included) and the SHA-256 of each
   attachment. The draft is read again just before sending: if anything changed, nothing is sent and a new summary is
   returned. `drafts.send` is the only sending call: no direct sending without a draft.
 - **Provenance**: a recipient found in an email the agent read is flagged in the summary (`provenance`): allowed only
@@ -174,7 +180,8 @@ latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
   its own privacy policy. Drafts and sent emails go to Gmail. NexusAGYmail sends nothing anywhere else.
 - **What it stores**, under `~/.nexus/nexus-agymail/` (or `NEXUS_AGYMAIL_HOME`): the refresh token (`token.bin`,
   encrypted with DPAPI on Windows, a `0600` file elsewhere), its lock file, the copy of your OAuth client
-  (`client_secret.json`), and backups of the Antigravity config files `setup` edits (`backups/`). The server also
+  (`client_secret.json`), the position of `list_new_messages` per account and label (`history.json`: a Gmail
+  `historyId` and the time of the last check, no email content), and backups of the Antigravity config files `setup` edits (`backups/`). The server also
   writes `~/.nexus/status/agymail.json` (installed and latest version, last check time) for the Nexus app. Attachments you ask
   it to save go to `~/Downloads/NexusAGYmail` (or the folder given). In memory only, for the life of the server: the
   pending send accords and the addresses seen in emails read (for the `provenance` warning). No email is written to

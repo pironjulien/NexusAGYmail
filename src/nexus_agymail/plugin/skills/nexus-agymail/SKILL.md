@@ -3,7 +3,7 @@ name: nexus-agymail
 description: The user's Gmail (signed-in account) through the nexus-agymail MCP server - search, read, attachments, drafts, labels, trash, send a draft after their yes. Also says which tool to pick for Gmail settings, another Google account, Calendar and Drive.
 ---
 
-# Gmail: which tool for what (nexus-agymail 0.10.4)
+# Gmail: which tool for what (nexus-agymail 0.11.0)
 
 ## 1. Pick the tool
 
@@ -27,6 +27,7 @@ Same names and parameters as Google's official Gmail MCP server, plus confirmed 
 | `search_threads(query, pageSize, pageToken, includeTrash)` | Search threads (Gmail syntax: `is:unread`, `from:x`, `newer_than:7d`); each thread summarizes its last 5 messages. One page per call, `nextPageToken` for more |
 | `get_message(messageId)` | Read a message |
 | `get_thread(threadId)` | Read a thread, quotes removed |
+| `list_new_messages(labelId, pageSize)` | New mail since the last call (the first call only sets the position); `more` = call again |
 | `download_attachment(messageId, partId, directory)` | Save an attachment (`part_id` returned by `get_message`); returns the file path, to read afterwards, never to run |
 | `list_labels()` | Exact label IDs and names |
 | `create_label(displayName)` | New label (`A/B` = sub-label), only if the user wants it |
@@ -46,7 +47,8 @@ Same names and parameters as Google's official Gmail MCP server, plus confirmed 
 ## 3. Sending, forwarding, replying: always the user's yes
 
 1. Prepare the draft (`create_draft`, or `update_draft`).
-2. Call `send_draft(draftId)` **without** `confirm`: nothing is sent, the tool returns the summary and an `accord`.
+2. Call `send_draft(draftId)` **without** `confirm`. If the client opens its confirmation dialog, the user answers
+   there: yes sends, no sends nothing (do not insist). Otherwise nothing is sent: you get a summary and an `accord`.
 3. Show the summary to the user (recipients, subject, start, attachments, `provenance`) and ask whether to send it.
 4. Only if they say yes for **this** draft: `send_draft(draftId, confirm=true, accord="<token>")`.
 
