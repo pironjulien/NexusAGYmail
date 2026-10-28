@@ -933,7 +933,10 @@ def _role_addresses(draft: dict[str, Any]) -> list[tuple[str, str]]:
         header = str(draft.get(field) or "").strip()
         if not header:
             continue
-        pairs = getaddresses([header])
+        try:
+            pairs = getaddresses([header])
+        except RecursionError:  # groupes « : » à la chaîne (fuzzing du 28/10) : en-tête illisible, gardé brut
+            pairs = []
         found += [(role, address) for _name, address in pairs if address]
         if not pairs or any(not address for _name, address in pairs):
             found.append((role, header))

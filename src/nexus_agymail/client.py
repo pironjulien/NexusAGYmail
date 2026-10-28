@@ -441,7 +441,10 @@ _ENCODED_WORD = re.compile(r"=\?[^?\s]+\?[bBqQ]\?[^?\s]*\?=")  # mot encodé (RF
 
 def plain_address(value: str) -> str:
     """Adresse e-mail seule d'un en-tête (« Nom <a@example.com> » → « a@example.com ») si elle est bien formée, sinon ''."""
-    _, address = parseaddr(value or "")
+    try:
+        _, address = parseaddr(value or "")
+    except RecursionError:  # groupes « : » à la chaîne dans un en-tête reçu (fuzzing du 28/10) : rien de lisible
+        return ""
     return address if _ADDRESS.match(address) else ""
 
 
@@ -454,7 +457,12 @@ def normalize_addresses(value: str, field: str, required: bool = False) -> str:
         return ""
     if "\r" in value or "\n" in value:
         raise ValueError(f"{field}: line breaks are not allowed")
-    pairs = getaddresses([value])
+    try:
+        pairs = getaddresses([value])
+    except RecursionError:
+        # groupes « : » à la chaîne : email._parseaddr s'appelle lui-même par groupe, une vraie liste n'en imbrique
+        # jamais (RFC 5322 § 3.4) ; refusée comme toute liste douteuse (trouvé par le fuzzing du 28/10)
+        raise ValueError(f"{field}: nested address groups") from None
     clean: list[str] = []
     for name, address in pairs:
         local, _, domain = address.rpartition("@")

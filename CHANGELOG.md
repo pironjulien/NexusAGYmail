@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-10-28
+
+### Fixed
+- Address lists with chained `:` groups (`a:a:a:…`, found by the nightly fuzzing): Python's address parser calls
+  itself once per group and ran out of stack. A list to send is refused ("nested address groups"), the sender of a
+  received message is read as unreadable instead of crashing the read, and draft recipients are kept raw for the send
+  approval.
+
+### Added
+- Signed releases: the files PyPI serves (wheel, sdist) are attached to each release with their Sigstore attestation
+  and SHA256SUMS.txt (`release-assets.yml`; verify with `gh attestation verify <file> --repo pironjulien/NexusAGYmail`).
+
 ## [0.12.2] - 2026-10-27
 
 ### Changed

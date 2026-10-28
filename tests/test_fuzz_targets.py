@@ -28,6 +28,9 @@ ADDRESSES = [
     "Nom\x85Bcc: x <a@example.net>",
     "a@example.com\n",
     "a@example.com\r",
+    # groupes « : » à la chaîne : le lecteur d'adresses de Python s'appelle lui-même par groupe (fuzzing du 28/10)
+    "a:" * 2000,
+    ":" * 2000,
 ]
 NAMES = [
     "\U0001f600" * 128,  # 256 unités UTF-16 : trop long pour Windows
