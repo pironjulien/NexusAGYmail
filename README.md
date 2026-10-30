@@ -217,6 +217,20 @@ latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
 
 ## Development
 
+The private Windows installer builds the standalone .NET 10 engine (`native/`, version 1.0.1) into a versioned
+directory under `%LOCALAPPDATA%\NexusAGYmail\releases`, and qualifies it before changing the Antigravity declaration.
+It keeps a running executable intact and never restarts the AI app. The native engine signs in by itself:
+`NexusAGYmail.exe auth [--client-secret <file>] [--no-browser]` (same browser flow, token format and checks as the
+Python `auth`, result printed as JSON). Python remains available for the guided console steps of `setup`/`auth` and
+the reference regression suite; the native MCP server does not invoke Python.
+
+The native suite uses the same 21 tool contracts as the reference engine and exercises JSON-RPC over stdio against
+the fake Gmail API exposed only on loopback, with an isolated profile and fake credentials. It checks paging,
+MIME/replies/attachments, exact approved send bytes, concurrent draft edits, one-use accords and ambiguous send
+responses. Native tests build the current sources into an external cache; `NEXUS_AGYMAIL_TEST_EXE` can select a
+candidate already built for qualification. They do not use the installed account or send real mail. .NET SDK 10
+and the NuGet dependencies must be available to build; normal native execution is self-contained.
+
 ```powershell
 ./test.ps1    # ruff, pyright, unit tests against a fake Gmail API (no network, no Google account)
 ```

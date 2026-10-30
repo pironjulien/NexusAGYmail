@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Native C# (.NET 10) engine in `native/` (`NexusAGYmail.exe`): a self-contained MCP stdio server exposing the same
+  21 Gmail tools, input schemas, structured outputs and descriptions as the Python engine, with no external runtime.
+  Windows DPAPI token store (same format as Python), one-time send approvals bound to the exact draft bytes
+  (SHA-256), incremental history tracking, atomic send log, `Zone.Identifier` on saved attachments, MIME with
+  MimeKit (replies, threads, encodings, resumable upload of large messages).
+- Native Google sign-in: `NexusAGYmail.exe auth [--client-secret FILE] [--no-browser]`, no Python needed. Same flow as
+  `nexus-agymail auth`: Desktop OAuth client, default browser on a local 127.0.0.1 port, PKCE S256 and checked
+  `state`, offline access, bounded wait (10 min), granted scopes and account address reported, JSON result. An old
+  token with extra scopes is revoked only after the new one is saved and verified.
+- Native behaviour tests over JSON-RPC against a fake Gmail API on loopback (contracts, paging, drafts, attachments,
+  approved bytes, concurrency, replayed approvals, quota, lost or truncated replies, redirects), built from the
+  current sources in an external cache; no real mail is read or sent.
+
+### Changed
+- Antigravity plugin manifest: `displayName` is "NexusAGYmail".
+
+### Fixed
+- Shared log in `%USERPROFILE%\.nexus\journal` instead of AppData: started by Claude Desktop (an MSIX app), the engine
+  wrote into a private copy of AppData that other tools could not see.
+- Native guardrails: embedded policy required, mail content fenced with an injection signal, labels validated before
+  creation, canonical secret paths (junctions included), the file actually opened is checked, HTTP redirects refused.
+
 ## [0.12.3] - 2026-10-28
 
 ### Fixed

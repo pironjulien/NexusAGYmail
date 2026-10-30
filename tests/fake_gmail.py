@@ -125,7 +125,7 @@ def _payload(part: EmailMessage) -> dict[str, Any]:
 
 def draft_message(message_id: str, sent: dict[str, Any]) -> dict[str, Any]:
     """Message de brouillon tel que Gmail le stocke, à partir du raw envoyé par le client."""
-    raw = base64.urlsafe_b64decode(sent["raw"])
+    raw = base64.urlsafe_b64decode(sent["raw"] + "=" * (-len(sent["raw"]) % 4))
     parsed = cast(EmailMessage, message_from_bytes(raw, policy=default))
     payload = _payload(parsed)
     plain = parsed.get_body(("plain",))

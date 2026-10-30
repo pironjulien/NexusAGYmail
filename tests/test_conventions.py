@@ -86,5 +86,6 @@ def test_competence_antigravity():
 def test_installeur_prive_antigravity_seul():
     text = INSTALL.read_text(encoding="utf-8")
     assert "claude mcp add" not in text.lower() and "mcp add" not in text
-    assert "'-B'" in text and "PYTHONDONTWRITEBYTECODE" in text
+    assert "PYTHONDONTWRITEBYTECODE" in text  # venv des tests de régression : pas de __pycache__ dans OneDrive
+    assert "& $nativeExe auth" in text  # connexion par le moteur natif, plus par Python
     assert r"src\nexus_agymail\plugin" in text and "Get-FileHash" in text

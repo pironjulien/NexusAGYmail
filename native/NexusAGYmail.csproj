@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Version>1.0.1</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>NexusAGYmail</AssemblyName>
+    <RootNamespace>NexusAGYmail</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MimeKit" Version="4.18.2" />
+    <EmbeddedResource Include="tool-contracts.json" LogicalName="tool-contracts.json" />
+    <EmbeddedResource Include="..\src\nexus_agymail\garde-fous.json" LogicalName="garde-fous.json" Condition="Exists('..\src\nexus_agymail\garde-fous.json')" />
+  </ItemGroup>
+</Project>

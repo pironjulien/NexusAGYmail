@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <LocalBuildRoot>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))\NexusAGYmail\build</LocalBuildRoot>
+    <BaseOutputPath>$(LocalBuildRoot)\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(LocalBuildRoot)\obj\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(LocalBuildRoot)\obj\</MSBuildProjectExtensionsPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>
