@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-30
+
 ### Added
 - Native C# (.NET 10) engine in `native/` (`NexusAGYmail.exe`): a self-contained MCP stdio server exposing the same
   21 Gmail tools, input schemas, structured outputs and descriptions as the Python engine, with no external runtime.

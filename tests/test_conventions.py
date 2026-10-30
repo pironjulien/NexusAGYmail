@@ -35,7 +35,7 @@ def test_un_seul_flux_oauth():
 
 def test_version():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    assert project["version"] == __version__ == "0.12.3"
+    assert project["version"] == __version__ == "0.13.0"
     assert json.loads((PLUGIN / "plugin.json").read_text(encoding="utf-8"))["version"] == __version__
     assert f"(nexus-agymail {__version__})" in SKILL.read_text(encoding="utf-8")
 
