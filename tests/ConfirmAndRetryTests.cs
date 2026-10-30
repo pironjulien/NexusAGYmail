@@ -196,6 +196,43 @@ public class ConfirmAndRetryTests
     }
 
     [Fact]
+    public async Task A_failed_input_resume_retires_its_state_even_before_argument_validation()
+    {
+        await using var box = new Mailbox("2026-07-28", Elicitation);
+        box.Fake.StoredDraft("d1", "Message");
+        string state = S(box.Server.Rpc("tools/call", A(("name", "send_draft"), ("arguments", A(("draftId", "d1")))))["result"]!["requestState"]);
+        var failed = Tool(box.Server.Rpc("tools/call", A(("name", "send_draft"),
+            ("arguments", A(("draftId", "d1"), ("confirm", "true"))),
+            ("inputResponses", A((McpServer.ElicitKey, A(("action", "decline"))))), ("requestState", state))));
+        Assert.Equal("invalid_argument", S(failed["code"]));
+        Assert.Equal("confirmation_required", S(box.Call("send_draft", A(("draftId", "d1"), ("confirm", true), ("accord", state)))["status"]));
+        Assert.Empty(box.Fake.Sent);
+        Assert.DoesNotContain("message-send", box.Fake.Kinds());
+    }
+
+    [Theory]
+    [InlineData("missing", """{"confirm_send":{"action":"decline"}}""")]
+    [InlineData("null", """{"confirm_send":{"action":"decline"}}""")]
+    [InlineData("\"\"", """{"confirm_send":{"action":"decline"}}""")]
+    [InlineData("17", """{"confirm_send":{"action":"decline"}}""")]
+    [InlineData("missing", "null")]
+    [InlineData("missing", "[]")]
+    [InlineData("missing", "{}")]
+    public async Task A_refused_or_failed_resume_with_no_valid_state_cannot_fall_back_to_direct_send(string stateJson, string responsesJson)
+    {
+        await using var box = new Mailbox("2026-07-28", Elicitation);
+        box.Fake.StoredDraft("d1", "Message");
+        string token = S(box.Server.Rpc("tools/call", A(("name", "send_draft"), ("arguments", A(("draftId", "d1")))))["result"]!["requestState"]);
+        var parameters = A(("name", "send_draft"), ("arguments", A(("draftId", "d1"), ("confirm", true), ("accord", token))),
+            ("inputResponses", JsonNode.Parse(responsesJson)));
+        if (stateJson != "missing") parameters["requestState"] = JsonNode.Parse(stateJson);
+        Assert.Equal("declined", S(Tool(box.Server.Rpc("tools/call", parameters))["status"]));
+        Assert.Equal("confirmation_required", S(box.Call("send_draft", A(("draftId", "d1"), ("confirm", true), ("accord", token)))["status"]));
+        Assert.Empty(box.Fake.Sent);
+        Assert.DoesNotContain("message-send", box.Fake.Kinds());
+    }
+
+    [Fact]
     public async Task No_other_tool_asks_for_confirmation()
     {
         await using var box = new Mailbox("2025-06-18", Elicitation);

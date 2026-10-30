@@ -96,7 +96,20 @@ public sealed class McpServer
             }
             else value = operations.Call(name, args);
         }
-        catch (Exception exception) { value = MailOperations.Failure(exception); }
+        catch (Exception exception)
+        {
+            if (name == "send_draft")
+            {
+                // Even invalid arguments or a failed draft lookup finish this confirmation attempt. Its state
+                // must not remain usable when the client later replays a yes or the direct-send fallback.
+                var parameters = request["params"] as JsonObject;
+                if (parameters?["requestState"] is JsonValue state && state.TryGetValue(out string? token))
+                    DraftAccord.RevokeAccord(token);
+                if ((parameters?["arguments"] as JsonObject)?["accord"] is JsonValue accord && accord.TryGetValue(out string? directToken))
+                    DraftAccord.RevokeAccord(directToken);
+            }
+            value = MailOperations.Failure(exception);
+        }
         Diagnostics.Journal(clientName, name, value, elapsed.ElapsedMilliseconds);
         var result = new JsonObject
         {
@@ -157,10 +170,15 @@ public sealed class McpServer
         // A final dialog response wins over contradictory direct-send arguments. Refusal, cancellation and a
         // failed or missing answer retire the state permanently; a later yes needs a new confirmation.
         string state = parameters?["requestState"] is JsonValue r && r.TryGetValue(out string? st) ? st : "";
-        if (InputRequiredProtocol && state.Length > 0)
+        if (InputRequiredProtocol && (parameters?.ContainsKey("requestState") == true || parameters?.ContainsKey("inputResponses") == true))
         {
             string answer = Answer((parameters?["inputResponses"] as JsonObject)?[ElicitKey]);
-            return (answer != "yes" ? RefuseSend(answer, state) : operations.Call("send_draft", Approved(state)), null);
+            if (answer != "yes")
+            {
+                DraftAccord.RevokeAccord(accord);
+                return (RefuseSend(answer, state), null);
+            }
+            return (operations.Call("send_draft", Approved(state)), null);
         }
         if ((confirm && accord.Length > 0) || !canElicit)
             return (operations.Call("send_draft", args), null);
