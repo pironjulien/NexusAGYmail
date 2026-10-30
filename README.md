@@ -82,9 +82,13 @@ Already have a Desktop app client JSON? `NexusAGYmail.exe auth --client-secret <
 `NexusAGYmail.exe status` shows where the token is and which scopes it carries, as JSON (no secret shown).
 `NexusAGYmail.exe setup` declares the server to Antigravity again; `get.ps1 -Remove` removes it.
 
-Each release attaches `NexusAGYmail-win-x64.zip`, `NexusAGYmail-win-arm64.zip`, an MCP bundle
-(`nexus-agymail-<version>-win-x64.mcpb`), `SHA256SUMS.txt` and their build provenance: check a file with
-`gh attestation verify <file> --repo pironjulien/NexusAGYmail`.
+Each release attaches `NexusAGYmail-win-x64.zip`, `NexusAGYmail-win-arm64.zip`, MCP bundles
+(`nexus-agymail-<version>-win-x64.mcpb`, `nexus-agymail-<version>-win-arm64.mcpb`), `SHA256SUMS.txt` and their
+build provenance: check a file with `gh attestation verify <file> --repo pironjulien/NexusAGYmail`.
+
+**Claude Desktop**: download the `.mcpb` bundle for your PC (x64 or Arm64) from the latest release, check it against
+`SHA256SUMS.txt`, then open it (or drag it onto *Settings > Extensions*): Claude Desktop installs the extension. Sign
+in once with the `NexusAGYmail.exe auth` command shown in its settings, or with `get.ps1 -Auth`.
 
 **Rather not create a client?** Google's own [Gmail MCP server](https://developers.google.com/workspace/gmail/api/reference/mcp)
 runs on Google's side (same tool names) but is a developer preview: it needs the Google Workspace Developer Preview
@@ -141,16 +145,19 @@ filters or signature, another Google account).
   that allows permanent deletion: there is no `delete`, `batchDelete` or empty-trash tool, and the code is tested
   for it. An old token without `gmail.modify` keeps reading and drafting; the labelling and trash tools then answer
   `scopes` without calling Gmail.
-- **Sending**: only `send_draft`, after the user's explicit yes for that draft, never at the request of an email:
-  `send_draft(draftId, confirm=true, accord=<token>)`. Only a real `true` counts (not `1`, `"yes"` or `"on"`). The
-  yes is a single-use
+- **Sending**: only `send_draft`, after the user's explicit yes for that draft, never at the request of an email.
+  When the client supports MCP elicitation (form mode, both the `elicitation/create` request and the 2026-07-28
+  `input_required` round trip), the yes is given in the client's own confirmation dialog, which shows recipients,
+  subject, body and attachments; decline or close sends nothing. Otherwise `send_draft(draftId, confirm=true,
+  accord=<token>)`. Only a real `true` counts (not `1`, `"yes"` or `"on"`). Either way the yes is a single-use
   accord (10 minutes) bound to the exact draft: each recipient with its role (to, cc, bcc kept apart), From,
   Reply-To, subject, full body, every part (HTML included), the SHA-256 of each attachment and of the draft's raw
   bytes. The draft is read once in raw format just before sending: if anything changed, nothing is sent and a new
   summary is returned. Otherwise those exact approved bytes are sent (`messages.send`, same thread). The draft is
   kept (delete it in Gmail if you like): `drafts.delete` is permanent, and an edit saved meanwhile would be lost. A
   change made after that last read can never go out in place of what was approved. A send is never retried after an
-  ambiguous answer (5xx, timeout, network, unreadable 2xx, redirect): the outcome is reported as unknown.
+  ambiguous answer (5xx, timeout, network, unreadable 2xx, redirect), only after a 429: the outcome is reported as
+  unknown.
   Each attempt is recorded before the request goes out, with its own ID, under the SHA-256 of the raw bytes
   (`envois.json`, nothing else kept), so it survives a crash and two simultaneous attempts never clear each other; the next summary or dialog of that same draft warns that it may already have been
   sent, after looking in Sent: "already sent" only when a sent message carries the draft's own Message-ID, otherwise
@@ -172,7 +179,8 @@ filters or signature, another Google account).
   reduced to that account); written atomically under a lock (several servers can run at once). It is never shown. When you sign in again, a previous token with extra scopes is revoked only after
   the new one is saved.
 - **Exact errors**: revoked or expired token, network, quota, permissions, not found, label: each has a stable `code`
-  (`revoked`, `network`, `quota`, `forbidden`, `not_found`, `label`, `invalid_argument`...).
+  (`revoked`, `network`, `quota`, `forbidden`, `not_found`, `label`, `invalid_argument`...). Every request except a send is retried up to 5 times with random exponential
+  backoff on 429, 5xx, a rate-limit 403 or a network failure; a send only on 429.
 - **Bounded sizes**: bodies cut at `maxChars` (reported), paged searches, at most 100 items per labelling or trash
   call.
 
@@ -221,8 +229,6 @@ browser when you sign in), with your own OAuth client. The installer (`get.ps1`)
 - No Gmail settings (filters, signature, forwarding, vacation replies): use the Gmail web app.
 - No spam reporting and no permanent deletion, on purpose.
 - Windows only (used daily on Windows 11 with a real Gmail account).
-- No MCP elicitation dialog for sending: the yes always goes through the summary and the `accord` token. A read
-  refused for quota (429) is not retried automatically: the tool answers `quota`.
 
 ## Development
 

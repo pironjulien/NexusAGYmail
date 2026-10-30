@@ -13,7 +13,7 @@ public sealed class Mailbox : IAsyncDisposable
     public string State => Path.Combine(Home, ".nexus", "nexus-agymail");
     public NativeServer Server { get; }
 
-    public Mailbox()
+    public Mailbox(string protocolVersion = "2026-07-28", JsonObject? capabilities = null)
     {
         Directory.CreateDirectory(State);
         File.WriteAllText(Path.Combine(State, "token.json"), Support.TestToken(FakeGmail.NewScopes).ToJsonString());
@@ -21,13 +21,15 @@ public sealed class Mailbox : IAsyncDisposable
         environment["NEXUS_AGYMAIL_API_BASE"] = Fake.ApiBase;
         environment["NEXUS_AGYMAIL_TOKEN_URI"] = Fake.BaseUrl + "/never-refresh";
         environment["NEXUS_JOURNAL"] = "1";
+        environment["NEXUS_AGYMAIL_BACKOFF_SCALE"] = "0";  // retries without waiting (their count is what is tested)
         Server = new NativeServer(environment);
         var init = Server.Rpc("initialize", new JsonObject
         {
-            ["protocolVersion"] = "2026-07-28",
+            ["protocolVersion"] = protocolVersion,
             ["clientInfo"] = new JsonObject { ["name"] = "Antigravity" },
+            ["capabilities"] = capabilities ?? new JsonObject(),
         });
-        Assert.Equal("2026-07-28", init["result"]!["protocolVersion"]!.GetValue<string>());
+        Assert.Equal(protocolVersion, init["result"]!["protocolVersion"]!.GetValue<string>());
     }
 
     public JsonObject Call(string name, JsonObject? arguments = null) => Server.Call(name, arguments);
@@ -194,9 +196,10 @@ public class NativeBehaviourTests
         var preview = box.Call("send_draft", A(("draftId", "d1")));
         if (failure == "lost") box.Fake.LostSends = 1;
         else if (failure == "garbled") box.Fake.GarbledSends = 1;
-        else box.Fake.Fault("message-send", 429);
+        else box.Fake.Fault("message-send", 429, 429, 429, 429, 429, 429);  // still refused after the 5 retries
         var result = box.Call("send_draft", A(("draftId", "d1"), ("confirm", true), ("accord", preview["accord"]!.DeepClone())));
-        Assert.Equal(1, box.Fake.Kinds().Count(k => k == "message-send"));
+        Assert.Equal(failure == "quota" ? 6 : 1, box.Fake.Kinds().Count(k => k == "message-send"));
+        Assert.True(failure == "quota" ? box.Fake.Sent.Count == 0 : box.Fake.Sent.Count == 1);
         if (failure == "quota")
         {
             Assert.False(result["sent"]!.GetValue<bool>());

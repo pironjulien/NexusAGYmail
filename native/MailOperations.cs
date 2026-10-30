@@ -404,6 +404,32 @@ internal sealed class MailOperations
         summary["messageId"] = summary["id"]?.DeepClone(); summary["id"] = S(draft["id"]);
         return MailFraming.Frame(new() { ["status"] = "success", ["draft"] = summary });
     }
+    public const int DialogBodyChars = 1618;  // body shown in the confirmation dialog (≈ 1,000 × golden ratio)
+
+    /// <summary>What the client's confirmation dialog shows (everything that would leave, the body up to 1,618
+    /// characters) and the accord bound to exactly that draft.</summary>
+    public (string Message, string Token) PrepareConfirmation(string draftId)
+    {
+        var draft = Get("drafts/" + Id(draftId), ("format", "raw"));
+        var meta = draft["message"]!.AsObject(); var (mime, raw) = ParseRaw(meta);
+        string sha = DraftAccord.ComputeFingerprint(raw), context = draftId + ":" + S(meta["threadId"]);
+        var summary = Full(mime, meta, DialogBodyChars);
+        var lines = new List<string> { "Send this email now? Nothing is sent unless you answer yes.", "" };
+        if (sends.Unknown(sha) is not null)
+            lines.AddRange(["⚠ An earlier send of this draft may have succeeded. Check Sent before saying yes.", ""]);
+        foreach (var (field, label) in new[] { ("from", "From"), ("replyTo", "Reply-To"), ("to", "To"), ("cc", "Cc"), ("bcc", "Bcc") })
+            if (S(summary[field]).Trim() is { Length: > 0 } value) lines.Add($"{label}: {value}");
+        lines.Add($"Subject: {S(summary["subject"])}");
+        foreach (var item in summary["attachments"]?.AsArray().OfType<JsonObject>() ?? [])
+            lines.Add($"Attachment: {S(item["name"])} ({item["size"]} bytes)");
+        foreach (var recipient in mime.To.Mailboxes.Concat(mime.Cc.Mailboxes).Concat(mime.Bcc.Mailboxes))
+            if (origins.TryGetValue(recipient.Address, out string? source))
+                lines.Add($"⚠ {MailPolicy.Clean(recipient.Address)} appears in an email that was read ({MailPolicy.Clean(source)}).");
+        bool cut = summary["truncated"]?.GetValue<bool>() == true;
+        lines.AddRange(["", S(summary["body"]) + (cut ? $"\n[… {summary["body_chars"]} characters in all]" : "")]);
+        return (string.Join("\n", lines), DraftAccord.IssueAccord(sha, context));
+    }
+
     private JsonObject Send(JsonObject args)
     {
         string draftId = Arg(args, "draftId"); var draft = Get("drafts/" + Id(draftId), ("format", "raw"));

@@ -129,19 +129,36 @@ public sealed class NativeServer : IDisposable
         _ = process.StandardError.ReadToEndAsync();
     }
 
-    public JsonObject Rpc(string method, JsonObject? parameters = null)
+    /// <summary>Writes a request (returns its id) without waiting for the answer.</summary>
+    public int Send(string method, JsonObject? parameters = null)
     {
         int id = ++serial;
-        var request = new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method, ["params"] = parameters ?? new JsonObject() };
-        process.StandardInput.WriteLine(request.ToJsonString());
+        Write(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method, ["params"] = parameters ?? new JsonObject() });
+        return id;
+    }
+
+    public void Write(JsonObject message)
+    {
+        process.StandardInput.WriteLine(message.ToJsonString());
         process.StandardInput.Flush();
-        if (!lines.TryTake(out string? line, TimeSpan.FromSeconds(20)))
+    }
+
+    /// <summary>Next message from the engine (an answer, or a request such as elicitation/create).</summary>
+    public JsonObject Next()
+    {
+        if (!lines.TryTake(out string? line, TimeSpan.FromSeconds(60)))
         {
             process.Kill(true);
-            Assert.Fail($"No JSON-RPC answer to {method}");
+            Assert.Fail("No JSON-RPC message from the engine");
         }
-        var response = JsonNode.Parse(line!)!.AsObject();
-        Assert.Equal(id, response["id"]!.GetValue<int>());
+        return JsonNode.Parse(line!)!.AsObject();
+    }
+
+    public JsonObject Rpc(string method, JsonObject? parameters = null)
+    {
+        int id = Send(method, parameters);
+        var response = Next();
+        Assert.True(response["id"] is JsonValue v && v.TryGetValue(out int got) && got == id, $"expected the answer to {method}, got {response.ToJsonString()}");
         return response;
     }
 

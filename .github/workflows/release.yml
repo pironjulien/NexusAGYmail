@@ -1,9 +1,9 @@
 # Release: on a vX.Y.Z tag (same version as native/Program.cs, server.json and CHANGELOG.md), runs test.ps1, builds
-# NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundle
-# nexus-agymail-X.Y.Z-win-x64.mcpb and get.ps1 (tools/package.ps1), attests their build provenance (Sigstore, keyless:
+# NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundles
+# nexus-agymail-X.Y.Z-win-x64.mcpb and nexus-agymail-X.Y.Z-win-arm64.mcpb, and get.ps1 (tools/package.ps1), attests their build provenance (Sigstore, keyless:
 # `gh attestation verify <file> --repo pironjulien/NexusAGYmail`), and publishes them with SHA256SUMS.txt and that
 # provenance (NexusAGYmail-X.Y.Z.intoto.jsonl, for `gh attestation verify <file> --bundle`) as the
-# "NexusAGYmail X.Y.Z" GitHub release. Then server.json, with the bundle's URL and SHA-256, goes to the official MCP
+# "NexusAGYmail X.Y.Z" GitHub release. Then server.json, with the bundles' URLs and SHA-256, goes to the official MCP
 # registry (GitHub OIDC login, namespace io.github.pironjulien; no token stored).
 # Actions pinned by commit SHA; Dependabot (github-actions) keeps them up to date.
 name: Release
@@ -23,7 +23,8 @@ jobs:
       id-token: write
       attestations: write
     outputs:
-      mcpb-sha256: ${{ steps.packages.outputs.mcpb-sha256 }}
+      mcpb-x64: ${{ steps.packages.outputs.mcpb-x64 }}
+      mcpb-arm64: ${{ steps.packages.outputs.mcpb-arm64 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -44,8 +45,10 @@ jobs:
           $server = Get-Content server.json -Raw | ConvertFrom-Json
           if ($server.version -ne $version) { throw "server.json has version $($server.version), not $version." }
           ./tools/package.ps1 -Version $version -Out dist
-          $mcpb = "nexus-agymail-$version-win-x64.mcpb"
-          "mcpb-sha256=$((Get-FileHash "dist/$mcpb" -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          foreach ($arch in 'x64', 'arm64') {
+            $hash = (Get-FileHash "dist/nexus-agymail-$version-win-$arch.mcpb" -Algorithm SHA256).Hash.ToLowerInvariant()
+            "mcpb-$arch=$hash" >> $env:GITHUB_OUTPUT
+          }
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
         id: provenance
         with:
@@ -88,14 +91,19 @@ jobs:
           persist-credentials: false
       - name: Bundle SHA-256 into server.json
         env:
-          MCPB_SHA256: ${{ needs.release.outputs.mcpb-sha256 }}
+          MCPB_X64: ${{ needs.release.outputs.mcpb-x64 }}
+          MCPB_ARM64: ${{ needs.release.outputs.mcpb-arm64 }}
         run: |
           set -euo pipefail
-          [[ "$MCPB_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "No bundle SHA-256"; exit 1; }
-          jq --arg sha "$MCPB_SHA256" '.packages[0].fileSha256 = $sha' server.json > server.tmp && mv server.tmp server.json
-          url=$(jq -r '.packages[0].identifier' server.json)
-          curl -fsSL -o bundle.mcpb "$url"
-          echo "$MCPB_SHA256  bundle.mcpb" | sha256sum --strict -c
+          for arch in x64 arm64; do
+            var="MCPB_${arch^^}"; sha="${!var}"
+            [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "No $arch bundle SHA-256"; exit 1; }
+            jq --arg sha "$sha" --arg end "-win-$arch.mcpb" '(.packages[] | select(.identifier | endswith($end)) | .fileSha256) = $sha' server.json > server.tmp
+            mv server.tmp server.json
+            url=$(jq -r --arg end "-win-$arch.mcpb" '.packages[] | select(.identifier | endswith($end)) | .identifier' server.json)
+            curl -fsSL -o "bundle-$arch.mcpb" "$url"
+            echo "$sha  bundle-$arch.mcpb" | sha256sum --strict -c
+          done
       - name: Install mcp-publisher (pinned, checksum verified)
         run: |
           set -euo pipefail

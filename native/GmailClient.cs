@@ -17,6 +17,8 @@ public sealed class GmailApiException : Exception
 {
     public HttpStatusCode StatusCode { get; }
     public string Details { get; }
+    /// <summary>Raw error body (reasons such as rateLimitExceeded), never shown.</summary>
+    public string ResponseBody { get; init; } = "";
 
     public GmailApiException(HttpStatusCode code, string message, string details = "")
         : base($"{message} (HTTP {(int)code}): {details}")
@@ -59,7 +61,7 @@ public sealed class GmailClient
 
         if (!resp.IsSuccessStatusCode)
         {
-            throw new GmailApiException(resp.StatusCode, resp.ReasonPhrase ?? "API error");
+            throw new GmailApiException(resp.StatusCode, resp.ReasonPhrase ?? "API error") { ResponseBody = text };
         }
 
         if (string.IsNullOrWhiteSpace(text))
@@ -70,15 +72,21 @@ public sealed class GmailClient
         return JsonNode.Parse(text) ?? new JsonObject();
     }
 
-    public JsonObject Execute(HttpMethod method, string path, JsonObject? payload = null, string? query = null)
-    {
-        using var request = CreateRequest(method, path, query);
-        if (payload is not null) request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
-        return SendRequest(request) as JsonObject ?? new();
-    }
+    private static bool IsSend(HttpMethod method, string path) => method == HttpMethod.Post && path == "messages/send";
+
+    public JsonObject Execute(HttpMethod method, string path, JsonObject? payload = null, string? query = null) =>
+        RetryPolicy.Run(IsSend(method, path), () =>
+        {
+            using var request = CreateRequest(method, path, query);
+            if (payload is not null) request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+            return SendRequest(request) as JsonObject ?? new();
+        });
 
     // Larger MIME bodies use Gmail's official resumable media endpoint. Never replay a send after ambiguous I/O.
-    public JsonObject Upload(string path, HttpMethod method, JsonObject metadata, byte[] raw)
+    public JsonObject Upload(string path, HttpMethod method, JsonObject metadata, byte[] raw) =>
+        RetryPolicy.Run(IsSend(method, path), () => UploadOnce(path, method, metadata, raw));
+
+    private JsonObject UploadOnce(string path, HttpMethod method, JsonObject metadata, byte[] raw)
     {
         string uploadBase = _apiBase.Replace("/gmail/v1/", "/upload/gmail/v1/", StringComparison.Ordinal);
         using var start = CreateRequest(method, path, "uploadType=resumable");
@@ -88,7 +96,7 @@ public sealed class GmailClient
         start.Headers.Add("X-Upload-Content-Length", raw.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
         start.Content = new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json");
         using var initiated = HttpClient.Send(start);
-        if (!initiated.IsSuccessStatusCode) throw new GmailApiException(initiated.StatusCode, "Media upload refused");
+        if (!initiated.IsSuccessStatusCode) throw new GmailApiException(initiated.StatusCode, "Media upload refused") { ResponseBody = initiated.Content.ReadAsStringAsync().GetAwaiter().GetResult() };
         var location = initiated.Headers.Location ?? throw new IOException("Upload session has no Location");
         if (!location.IsAbsoluteUri) location = new Uri(start.RequestUri, location);
         if (location.Scheme != start.RequestUri.Scheme || location.Host != start.RequestUri.Host || location.Port != start.RequestUri.Port)

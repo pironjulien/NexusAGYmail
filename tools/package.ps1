@@ -1,6 +1,6 @@
 # Release files of one version (used by .github/workflows/release.yml, runnable locally to check a release):
 #   NexusAGYmail-win-x64.zip, NexusAGYmail-win-arm64.zip  self-contained single-file NexusAGYmail.exe per architecture
-#   nexus-agymail-<version>-win-x64.mcpb                   MCP bundle (manifest.json, icon, server\NexusAGYmail.exe x64)
+#   nexus-agymail-<version>-win-x64.mcpb, …-win-arm64.mcpb  MCP bundles (manifest.json, icon, server\NexusAGYmail.exe)
 #   get.ps1                                               the installer, checked and attested like the packages
 #   SHA256SUMS.txt                                        SHA-256 of every file above
 # Build outputs in ~\.nexus\build\nexusagymail\release; nothing written to the sources.
@@ -29,10 +29,12 @@ foreach ($rid in 'win-x64', 'win-arm64') {
     Compress-Archive -LiteralPath (Join-Path $publish 'NexusAGYmail.exe') -DestinationPath $zip
 }
 
-# MCP bundle (https://github.com/modelcontextprotocol/mcpb): the x64 engine, also run by Windows on Arm.
-$bundle = Join-Path $work 'mcpb'
+# MCP bundles (https://github.com/modelcontextprotocol/mcpb), one per architecture, same manifest.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+foreach ($rid in 'win-x64', 'win-arm64') {
+$bundle = Join-Path $work "mcpb-$rid"
 New-Item -ItemType Directory -Force (Join-Path $bundle 'server') | Out-Null
-Copy-Item (Join-Path $work 'win-x64\NexusAGYmail.exe') (Join-Path $bundle 'server')
+Copy-Item (Join-Path $work "$rid\NexusAGYmail.exe") (Join-Path $bundle 'server')
 Copy-Item (Join-Path $repo 'native\plugin\logo.png') (Join-Path $bundle 'icon.png')
 $tools = [IO.File]::ReadAllText((Join-Path $repo 'native\tool-contracts.json')) | ConvertFrom-Json
 $manifest = [ordered]@{
@@ -61,9 +63,8 @@ $manifest = [ordered]@{
     compatibility = [ordered]@{ platforms = @('win32') }
 }
 [IO.File]::WriteAllText((Join-Path $bundle 'manifest.json'), ($manifest | ConvertTo-Json -Depth 10) + "`n", [Text.UTF8Encoding]::new($false))
-$mcpb = Join-Path $Out "nexus-agymail-$Version-win-x64.mcpb"
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[IO.Compression.ZipFile]::CreateFromDirectory($bundle, $mcpb)
+[IO.Compression.ZipFile]::CreateFromDirectory($bundle, (Join-Path $Out "nexus-agymail-$Version-$rid.mcpb"))
+}
 
 Copy-Item (Join-Path $repo 'get.ps1') $Out
 Get-ChildItem $Out -File | Sort-Object Name | ForEach-Object {

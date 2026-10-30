@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-10-30
+
+### Added
+- Confirmation in the client's own dialog before any send, as the Python engine did: when the client declares MCP
+  elicitation, `send_draft(draftId)` opens a dialog with everything that would leave (From, Reply-To, To, Cc, Bcc,
+  subject, attachments, the body up to 1,618 characters, recipients seen in emails read) and a single boolean; only a
+  real `true` sends (not `1`, `"yes"`, a missing answer), decline or cancel sends nothing. From protocol 2026-07-28 the
+  dialog travels in an `InputRequiredResult` (`inputRequests.confirm_send`, `requestState` = the accord), before it
+  as an `elicitation/create` request. The draft is read again and compared with what the dialog showed; any change
+  voids the yes. A client without elicitation, or a refused dialog, keeps the summary plus `accord` path. No other
+  tool asks: reading, tidying, labels and drafts stay as they are. Results carry `resultType` from 2026-07-28.
+- Automatic retries, as the Python engine (google-api-python-client, `num_retries=5`): every request except a send
+  is retried up to 5 times on 429, 500, 502, 503, 504, a rate-limit 403 and a network failure, waiting
+  random(0..1) × 2^n seconds; a send is retried only on 429 (refused before any processing), up to 5 times, waiting
+  min(32, 2^n) × random(0.5..1) seconds, and never after a 5xx, a timeout or a network failure. Retry-After is not
+  read (it was not in Python either).
+- MCP bundle for Windows on Arm (`nexus-agymail-X.Y.Z-win-arm64.mcpb`) next to the x64 one, both in `server.json`.
+
 ## [0.14.2] - 2026-10-30
 
 ### Fixed
