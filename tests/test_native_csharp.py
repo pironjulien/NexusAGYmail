@@ -65,7 +65,6 @@ def _native_exe() -> Path:
             "win-x64",
             "--self-contained",
             "true",
-            "--no-restore",
             "-p:PublishSingleFile=true",
             "-o",
             str(exe.parent),
