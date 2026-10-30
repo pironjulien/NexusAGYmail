@@ -1,10 +1,10 @@
-# NexusAGYmail for Windows 10/11 (Windows PowerShell 5.1 or PowerShell 7), no administrator rights, no Python. In one line:
-#   irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1 | iex
-# Then the guided Google sign-in (your own OAuth client, about 5 minutes, once):
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1))) -Auth
-# Remove it (Antigravity plugin and program; your token and OAuth client stay in ~\.nexus\nexus-agymail):
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1))) -Remove
-#
+# NexusAGYmail for Windows 10/11 (Windows PowerShell 5.1 or PowerShell 7), no administrator rights, no Python.
+# Usual way: the NexusSystem app (Microsoft Store), which runs this file. By hand: download get.ps1 and SHA256SUMS.txt
+# from the latest release, check the hash (and `gh attestation verify get.ps1 --repo pironjulien/NexusAGYmail`), then:
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\get.ps1          install or update
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\get.ps1 -Auth    then the guided Google sign-in
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\get.ps1 -Remove  Antigravity plugin and program removed
+#                                         (your token and OAuth client stay in ~\.nexus\nexus-agymail)
 # It downloads the latest release's NexusAGYmail-win-x64.zip or NexusAGYmail-win-arm64.zip (by the PC's architecture),
 # checks its SHA-256 against the release's SHA256SUMS.txt before extracting anything (build provenance:
 # `gh attestation verify <file> --repo pironjulien/NexusAGYmail`), installs it in ~\.nexus\nexus-agymail\app\<version>
@@ -141,6 +141,4 @@ try {
     $code = 1
 }
 if ($Pack -and $script:PackResult) { Write-Output $script:PackResult }
-# Run as a file: its exit code. Run by `irm | iex` or a script block: never `exit`, which would close the window.
-if ($PSCommandPath) { exit $code }
-if ($code) { throw 'NexusAGYmail: not installed (see above).' }
+exit $code

@@ -25,20 +25,27 @@ ever deleted for good.
 Part of the Nexus family: [NexusWindows](https://julienpiron.fr/nexuswindows/),
 [NexusBrowser](https://julienpiron.fr/nexusbrowser/), [NexusAndroid](https://julienpiron.fr/nexusandroid/).
 
-**Install:** ask your AI to install NexusAGYmail through [NexusSystem](https://github.com/pironjulien/NexusSystem) (or use the NexusSystem app from the Microsoft Store), or run the one-line installer below. New versions are no longer published to PyPI (0.13.0, the last Python version, stays available there).
+**Install:** the [NexusSystem app](https://apps.microsoft.com/detail/9NSH2P3QLWT1) from the Microsoft Store
+(`winget install --id 9NSH2P3QLWT1 --source msstore`), or ask your AI to install NexusAGYmail through it. By hand, see
+below. New versions are no longer published to PyPI (0.13.0, the last Python version, stays available there).
 
 ## Quick start
 
 You need Windows 10 or 11 and a Google account. About 5 minutes, once.
 
-1. **Install, then run the guided sign-in** (PowerShell, no administrator rights):
+1. **Install, then run the guided sign-in** (PowerShell, no administrator rights). Download the release files, check
+   them, then run the installer as a file:
    ```powershell
-   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1))) -Auth
+   $r = 'https://github.com/pironjulien/NexusAGYmail/releases/latest/download'
+   Invoke-WebRequest "$r/get.ps1" -OutFile get.ps1
+   Invoke-WebRequest "$r/SHA256SUMS.txt" -OutFile SHA256SUMS.txt
+   (Get-FileHash get.ps1 -Algorithm SHA256).Hash   # must match the get.ps1 line of SHA256SUMS.txt
+   gh attestation verify get.ps1 --repo pironjulien/NexusAGYmail   # optional: build provenance
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\get.ps1 -Auth
    ```
-   It downloads the latest release for your PC (x64 or Arm64), checks it against the release's `SHA256SUMS.txt`,
+   It downloads the release for your PC (x64 or Arm64), checks it against the release's `SHA256SUMS.txt`,
    installs it in `~\.nexus\nexus-agymail\app\<version>`, adds the `nexus-agymail` plugin to Antigravity, then
-   connects Gmail (`irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1 | iex` installs or
-   updates without signing in). Gmail scopes are restricted, so
+   connects Gmail (without `-Auth`: install or update only). Gmail scopes are restricted, so
    every user creates their own free OAuth client in their own Google Cloud project: your mail never goes through
    anyone else's app. The assistant opens each Google page in your browser at the right place and says what to
    click (it first asks which Gmail address to connect, so the pages open on that account):

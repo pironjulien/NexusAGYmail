@@ -75,6 +75,21 @@ public sealed class GetScriptTests : IDisposable
     }
 
     [Fact]
+    public void Docs_and_scripts_never_run_downloaded_code_in_memory()
+    {
+        // Microsoft Defender flags these forms (Trojan:Win32/Commando.A!ml): install by files and -File only.
+        var forbidden = new System.Text.RegularExpressions.Regex(@"\birm\b|\biex\b|Invoke-Expression|scriptblock\]::Create|EncodedCommand", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var files = new[] { "README.md", "get.ps1", "install.ps1", "test.ps1", Path.Combine("tools", "package.ps1") }
+            .Select(f => Path.Combine(Support.Repository, f)).Where(File.Exists)
+            .Concat(Directory.GetFiles(Path.Combine(Support.Repository, ".github", "workflows")));
+        foreach (string file in files)
+        {
+            var lines = File.ReadAllLines(file).Select((l, i) => (l, i)).Where(x => forbidden.IsMatch(x.l)).ToList();
+            Assert.True(lines.Count == 0, $"{file}:{(lines.Count > 0 ? lines[0].i + 1 : 0)}: {(lines.Count > 0 ? lines[0].l : "")}");
+        }
+    }
+
+    [Fact]
     public void A_test_package_never_installs_for_real()
     {
         var info = new ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };

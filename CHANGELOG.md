@@ -4,7 +4,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.14.1] - 2026-10-30
+
+### Changed
+- Install by files only, never by downloaded code run in memory (Microsoft Defender flagged such one-line
+  installers as Trojan:Win32/Commando.A!ml): the README downloads `get.ps1` and `SHA256SUMS.txt` from the release,
+  checks the hash and the provenance, then runs `powershell -File .\get.ps1`; the main way is the NexusSystem app
+  from the Microsoft Store. `get.ps1` no longer documents nor supports being run from memory.
 
 ### Added
 - CI `security.yml` on every push and pull request: gitleaks over the whole history and zizmor (medium and high
@@ -18,7 +24,7 @@ The native .NET 10 engine (`NexusAGYmail.exe`) is now the only engine: no Python
 - GitHub release per version with `NexusAGYmail-win-x64.zip` and `NexusAGYmail-win-arm64.zip` (self-contained, single
   file), an MCP bundle `nexus-agymail-X.Y.Z-win-x64.mcpb`, `SHA256SUMS.txt` and the Sigstore build provenance of every
   file (`gh attestation verify <file> --repo pironjulien/NexusAGYmail`; bundle `NexusAGYmail-X.Y.Z.intoto.jsonl`).
-- `get.ps1`: one-line installer without Python (`irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1 | iex`):
+- `get.ps1`: installer without Python, attached to each release (run as a file):
   picks the zip for the PC's architecture, checks it against `SHA256SUMS.txt`, installs it under
   `~\.nexus\nexus-agymail\app\<version>` and declares it to Antigravity; `-Auth` then runs the guided sign-in.
 - `NexusAGYmail.exe setup`: declares the server to Antigravity (plugin with its skill, embedded in the executable),
