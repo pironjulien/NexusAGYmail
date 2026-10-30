@@ -6,7 +6,7 @@ namespace NexusAGYmail;
 public static class Program
 {
     // Same version as NexusAGYmail.csproj, plugin/plugin.json and the top section of CHANGELOG.md (checked by the tests).
-    public const string Version = "0.15.0";
+    public const string Version = "0.15.1";
 
     public static int Main(string[] args)
     {

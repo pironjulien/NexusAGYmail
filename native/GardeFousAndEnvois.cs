@@ -179,4 +179,5 @@ public static class DraftAccord
     public static bool VerifyAccord(string token, string sha, string context = "") =>
         PendingTokens.TryRemove(token, out var pending) && pending.Expires >= DateTimeOffset.UtcNow &&
         pending.Context == context && pending.Fingerprint == sha;
+    public static void RevokeAccord(string token) => PendingTokens.TryRemove(token, out _);
 }

@@ -138,7 +138,6 @@ public class ConfirmAndRetryTests
             ("name", "send_draft"), ("arguments", A(("draftId", "d1"))),
             ("inputResponses", A((McpServer.ElicitKey, JsonNode.Parse(answer)))), ("requestState", requestState))));
 
-        Assert.Equal("declined", S(Again("""{"action":"decline"}""", state)["status"]));
         Assert.Equal("confirmation_required", S(Again("""{"action":"accept","content":{"send":true}}""", "forged-state")["status"]));
         Assert.Empty(box.Fake.Sent);
         var sent = Again("""{"action":"accept","content":{"send":true}}""", state);
@@ -146,6 +145,54 @@ public class ConfirmAndRetryTests
         Assert.Single(box.Fake.Sent);
         Assert.Equal("confirmation_required", S(Again("""{"action":"accept","content":{"send":true}}""", state)["status"]));  // single use
         Assert.Single(box.Fake.Sent);
+    }
+
+    [Theory]
+    [InlineData("""{"action":"decline"}""", "declined")]
+    [InlineData("""{"action":"cancel"}""", "cancelled")]
+    [InlineData("""{"action":"accept","content":{"send":false}}""", "declined")]
+    [InlineData("""{"action":"accept","content":{"send":"yes"}}""", "declined")]
+    [InlineData("""{"action":"accept"}""", "declined")]
+    [InlineData("""{"error":{"code":-32603,"message":"Dialog failed"}}""", "declined")]
+    [InlineData("null", "declined")]
+    [InlineData("true", "declined")]
+    [InlineData("[]", "declined")]
+    public async Task A_declined_cancelled_or_failed_input_request_cannot_be_replayed(string response, string status)
+    {
+        await using var box = new Mailbox("2026-07-28", Elicitation);
+        box.Fake.StoredDraft("d1", "Message");
+        JsonObject Ask() => box.Server.Rpc("tools/call", A(("name", "send_draft"), ("arguments", A(("draftId", "d1")))))["result"]!.AsObject();
+        JsonObject Resume(string answer, string state) => Tool(box.Server.Rpc("tools/call", A(
+            ("name", "send_draft"), ("arguments", A(("draftId", "d1"))),
+            ("inputResponses", A((McpServer.ElicitKey, JsonNode.Parse(answer)))), ("requestState", state))));
+
+        string state = S(Ask()["requestState"]);
+        Assert.Equal(status, S(Resume(response, state)["status"]));
+        const string yes = """{"action":"accept","content":{"send":true}}""";
+        Assert.Equal("confirmation_required", S(Resume(yes, state)["status"]));
+        Assert.Equal("confirmation_required", S(box.Call("send_draft", A(("draftId", "d1"), ("confirm", true), ("accord", state)))["status"]));
+        Assert.Empty(box.Fake.Sent);
+        Assert.DoesNotContain("message-send", box.Fake.Kinds());
+
+        string fresh = S(Ask()["requestState"]);
+        Assert.NotEqual(state, fresh);
+        Assert.True(Resume(yes, fresh)["sent"]!.GetValue<bool>());
+        Assert.Single(box.Fake.Sent);
+    }
+
+    [Fact]
+    public async Task A_dialog_refusal_takes_priority_over_conflicting_direct_send_arguments()
+    {
+        await using var box = new Mailbox("2026-07-28", Elicitation);
+        box.Fake.StoredDraft("d1", "Message");
+        string state = S(box.Server.Rpc("tools/call", A(("name", "send_draft"), ("arguments", A(("draftId", "d1")))))["result"]!["requestState"]);
+        var refused = Tool(box.Server.Rpc("tools/call", A(("name", "send_draft"),
+            ("arguments", A(("draftId", "d1"), ("confirm", true), ("accord", state))),
+            ("inputResponses", A((McpServer.ElicitKey, A(("action", "decline"))))), ("requestState", state))));
+        Assert.Equal("declined", S(refused["status"]));
+        Assert.Empty(box.Fake.Sent);
+        Assert.Equal("confirmation_required", S(box.Call("send_draft", A(("draftId", "d1"), ("confirm", true), ("accord", state)))["status"]));
+        Assert.Empty(box.Fake.Sent);
     }
 
     [Fact]

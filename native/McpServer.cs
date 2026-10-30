@@ -134,32 +134,40 @@ public sealed class McpServer
     /// <summary>"yes", "declined" or "cancelled" from the dialog's answer. Only a real true sends (not 1, "yes", "on").</summary>
     public static string Answer(JsonNode? result)
     {
-        string action = result?["action"] is JsonValue a && a.TryGetValue(out string? s) ? s : "";
+        if (result is not JsonObject answer) return "declined";
+        string action = answer["action"] is JsonValue a && a.TryGetValue(out string? s) ? s : "";
         if (action != "accept") return action == "cancel" ? "cancelled" : "declined";
-        return result?["content"]?["send"] is JsonValue v && v.GetValueKind() == JsonValueKind.True ? "yes" : "declined";
+        return answer["content"] is JsonObject content && content["send"] is JsonValue v && v.GetValueKind() == JsonValueKind.True ? "yes" : "declined";
     }
 
     private static JsonObject NotSent(string answer) => new() { ["status"] = answer, ["code"] = answer, ["sent"] = false, ["message"] = DeclinedNote };
+
+    private static JsonObject RefuseSend(string answer, string token)
+    {
+        DraftAccord.RevokeAccord(token);
+        return NotSent(answer);
+    }
 
     private (JsonObject? Value, JsonObject? InputRequired) ConfirmSend(JsonObject args, JsonObject? parameters)
     {
         bool confirm = args["confirm"] is JsonValue c && c.GetValueKind() == JsonValueKind.True;
         string accord = args["accord"] is JsonValue t && t.TryGetValue(out string? token) ? token : "";
-        if ((confirm && accord.Length > 0) || !canElicit)
-            return (operations.Call("send_draft", args), null);
         string draftId = args["draftId"]?.GetValue<string>() ?? "";
         JsonObject Approved(string token) => new() { ["draftId"] = draftId, ["confirm"] = true, ["accord"] = token };
+        // A final dialog response wins over contradictory direct-send arguments. Refusal, cancellation and a
+        // failed or missing answer retire the state permanently; a later yes needs a new confirmation.
+        string state = parameters?["requestState"] is JsonValue r && r.TryGetValue(out string? st) ? st : "";
+        if (InputRequiredProtocol && state.Length > 0)
+        {
+            string answer = Answer((parameters?["inputResponses"] as JsonObject)?[ElicitKey]);
+            return (answer != "yes" ? RefuseSend(answer, state) : operations.Call("send_draft", Approved(state)), null);
+        }
+        if ((confirm && accord.Length > 0) || !canElicit)
+            return (operations.Call("send_draft", args), null);
         if (InputRequiredProtocol)
         {
             // 2026-07-28: the question goes out in an InputRequiredResult; the client calls the tool again with the answer
             // and the state, which carries the accord bound to what was shown.
-            var response = parameters?["inputResponses"]?[ElicitKey];
-            string state = parameters?["requestState"] is JsonValue r && r.TryGetValue(out string? st) ? st : "";
-            if (response is JsonObject && state.Length > 0)
-            {
-                string answer = Answer(response);
-                return (answer != "yes" ? NotSent(answer) : operations.Call("send_draft", Approved(state)), null);
-            }
             var (message, prepared) = operations.PrepareConfirmation(draftId);
             return (null, new JsonObject
             {
@@ -174,11 +182,12 @@ public sealed class McpServer
         catch (Exception error) when (error is IOException or InvalidOperationException or JsonException)
         {
             // No dialog possible (client, transport): back to the summary and its accord; nothing is sent.
+            DraftAccord.RevokeAccord(accordToken);
             return (operations.Call("send_draft", new JsonObject { ["draftId"] = draftId }), null);
         }
         string verdict = Answer(result);
         // Read again and compared with what the dialog showed: any change meanwhile voids the yes.
-        return (verdict != "yes" ? NotSent(verdict) : operations.Call("send_draft", Approved(accordToken)), null);
+        return (verdict != "yes" ? RefuseSend(verdict, accordToken) : operations.Call("send_draft", Approved(accordToken)), null);
     }
 
     /// <summary>Sends elicitation/create to the client and waits for its answer; other messages received meanwhile are

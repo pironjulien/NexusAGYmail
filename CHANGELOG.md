@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-10-30
+
+### Fixed
+- Declining, cancelling or failing a send confirmation permanently revokes its single-use accord, including the
+  `requestState` returned by protocol 2026-07-28. Replaying it with a later yes, or with direct `confirm`/`accord`
+  arguments, sends nothing; a fresh confirmation is required. A dialog refusal also takes priority over conflicting
+  direct-send arguments. Malformed or missing answers fail closed. Earlier tests mistakenly allowed accepting the
+  same state after a decline; regression tests now refuse that replay and check that a new confirmation can succeed.
+
 ## [0.15.0] - 2026-10-30
 
 ### Added
