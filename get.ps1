@@ -16,6 +16,11 @@
 param([switch]$Auth, [switch]$Remove, [switch]$Real)
 
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell started from PowerShell 7 inherits its module folders, whose modules it cannot load (Get-FileHash,
+# Unblock-File...): keep only its own.
+if ($PSVersionTable.PSEdition -ne 'Core') {
+    $env:PSModulePath = (($env:PSModulePath -split ';') | Where-Object { $_ -and $_ -notmatch '\\PowerShell\\(7|Modules)' }) -join ';'
+}
 $ProgressPreference = 'SilentlyContinue'  # Invoke-WebRequest is many times slower with its progress bar
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 

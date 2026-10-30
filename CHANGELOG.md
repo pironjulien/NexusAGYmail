@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.2] - 2026-10-30
+
+### Fixed
+- `get.ps1` under Windows PowerShell 5.1 started from PowerShell 7: it no longer fails on `Get-FileHash` (PowerShell 7
+  module folders inherited through `PSModulePath` are left out).
+
 ## [0.14.1] - 2026-10-30
 
 ### Changed
