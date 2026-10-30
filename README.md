@@ -1,11 +1,8 @@
 # NexusAGYmail
 
-<!-- mcp-name: io.github.pironjulien/nexus-agymail -->
-
 <img src="https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/src/nexus_agymail/plugin/logo.png" alt="NexusAGYmail icon" width="96">
 
 [![Release](https://img.shields.io/github/v/release/pironjulien/NexusAGYmail)](https://github.com/pironjulien/NexusAGYmail/releases)
-[![PyPI](https://img.shields.io/pypi/v/nexus-agymail)](https://pypi.org/project/nexus-agymail/)
 [![Tests](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml/badge.svg)](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/pironjulien/NexusAGYmail/badge)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusAGYmail)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/pironjulien/NexusAGYmail/blob/main/LICENSE)
@@ -27,6 +24,8 @@ ever deleted for good.
 
 Part of the Nexus family: [NexusWindows](https://julienpiron.fr/nexuswindows/),
 [NexusBrowser](https://julienpiron.fr/nexusbrowser/), [NexusAndroid](https://julienpiron.fr/nexusandroid/).
+
+**Install:** ask your AI to install NexusAGYmail through [NexusSystem](https://github.com/pironjulien/NexusSystem) (or use the NexusSystem app from the Microsoft Store). New versions are no longer published to PyPI; earlier packages stay available.
 
 ## Quick start
 
