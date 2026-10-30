@@ -2,17 +2,21 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <Version>1.0.1</Version>
+    <Version>0.14.0</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>NexusAGYmail</AssemblyName>
     <RootNamespace>NexusAGYmail</RootNamespace>
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MimeKit" Version="4.18.2" />
     <EmbeddedResource Include="tool-contracts.json" LogicalName="tool-contracts.json" />
-    <EmbeddedResource Include="..\src\nexus_agymail\garde-fous.json" LogicalName="garde-fous.json" Condition="Exists('..\src\nexus_agymail\garde-fous.json')" />
+    <!-- Shared guardrail policy, byte-identical to the author's common copy (vendored.sha256). -->
+    <EmbeddedResource Include="garde-fous.json" LogicalName="garde-fous.json" />
+    <!-- Antigravity plugin written by `NexusAGYmail.exe setup`: manifest, logo and skill. -->
+    <EmbeddedResource Include="plugin\**\*" LogicalName="plugin/%(RecursiveDir)%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="NexusAGYmail.Tests" />
   </ItemGroup>
 </Project>

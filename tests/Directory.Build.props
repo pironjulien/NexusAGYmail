@@ -1,0 +1,10 @@
+<Project>
+  <!-- Tests (xUnit v3, run by `dotnet test` from the repository root): every build and test output goes to
+       ~\.nexus\build\nexusagymail\test, never into OneDrive or AppData. -->
+  <PropertyGroup>
+    <NexusBuild Condition="'$(NexusBuild)' == ''">$(USERPROFILE)\.nexus\build\nexusagymail\</NexusBuild>
+    <BaseOutputPath>$(NexusBuild)test\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(NexusBuild)test\obj\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>

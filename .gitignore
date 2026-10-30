@@ -1,14 +1,11 @@
-# Python et caches (normalement hors dépôt : -B, PYTHONDONTWRITEBYTECODE, caches sous ~/.nexus/nexus-agymail)
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-.venv/
-*.egg-info/
+# Build outputs (normally outside the repository: ~\.nexus\build\nexusagymail, see Directory.Build.props)
+bin/
+obj/
 dist/
-build/
+*.user
+.vs/
 
-# Secrets : ne vivent jamais dans le dépôt (dossier d'état ~/.nexus/nexus-agymail)
+# Secrets: never in the repository (state folder ~/.nexus/nexus-agymail)
 token.json
 token.bin
 token.lock

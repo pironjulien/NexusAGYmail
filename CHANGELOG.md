@@ -4,10 +4,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.14.0] - 2026-10-30
+
+The native .NET 10 engine (`NexusAGYmail.exe`) is now the only engine: no Python, no uv.
+
+### Added
+- GitHub release per version with `NexusAGYmail-win-x64.zip` and `NexusAGYmail-win-arm64.zip` (self-contained, single
+  file), an MCP bundle `nexus-agymail-X.Y.Z-win-x64.mcpb`, `SHA256SUMS.txt` and the Sigstore build provenance of every
+  file (`gh attestation verify <file> --repo pironjulien/NexusAGYmail`; bundle `NexusAGYmail-X.Y.Z.intoto.jsonl`).
+- `get.ps1`: one-line installer without Python (`irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1 | iex`):
+  picks the zip for the PC's architecture, checks it against `SHA256SUMS.txt`, installs it under
+  `~\.nexus\nexus-agymail\app\<version>` and declares it to Antigravity; `-Auth` then runs the guided sign-in.
+- `NexusAGYmail.exe setup`: declares the server to Antigravity (plugin with its skill, embedded in the executable),
+  replaces an earlier `uvx … nexus-agymail` entry and keeps its `env`, keeps a plugin written by the user, removes an
+  old global entry (backed up), then offers the guided sign-in. `NEXUS_PACK=1`: no question, last line
+  `NEXUS_PACK_RESULT …`.
+- `NexusAGYmail.exe auth` guides the first sign-in when no OAuth client exists yet (each Google Cloud console page
+  opened in turn, the downloaded client JSON found in Downloads), then opens the page that fixes a disabled Gmail API
+  or an app left in Testing.
+- MCP registry: `server.json` with an `mcpb` package (release URL and SHA-256), published by the release workflow
+  through GitHub OIDC.
+
+### Changed
+- `NexusAGYmail.exe status` prints the token report as JSON (no network, no secret), exit 1 without a valid token.
+- Tests: one xUnit v3 suite (`dotnet test`): the engine over JSON-RPC against a fake Gmail API on loopback (now in C#),
+  sign-in against a fake Google, the guided sign-in, `setup` in a temporary home, recipient lists and attachment names
+  over many seeded inputs (formerly the Atheris fuzz targets). CI runs `test.ps1` on Windows.
+- Engine version follows the product version (0.14.0); build outputs in `~\.nexus\build\nexusagymail`.
+- CodeQL analyses C# instead of Python; Dependabot follows NuGet instead of uv.
+
+### Fixed
+- Recipients (found by the new seeded tests): an address carrying a space, a line or paragraph separator or an
+  invisible formatting character (zero-width space…) is refused instead of being written to the draft.
+- Saved attachment names: `CON .txt`-like names (spaces before the extension) and `CONIN$` / `CONOUT$` are treated as
+  Windows reserved names too.
 
 ### Removed
-- PyPI, MCP registry and Glama publishing (`publish.yml`, `server.json`, `glama.json`): installation goes through NexusSystem. Earlier PyPI packages stay available.
+- The Python package (`src/nexus_agymail`, `pyproject.toml`, `uv.lock`), its pytest suite, the Atheris fuzzing and
+  the Linux startup job. The last PyPI version (0.13.0) stays available but is no longer updated.
+- `NexusAGYmail.exe --selftest`: its checks are in the xUnit suite.
+- PyPI and Glama publishing (`publish.yml`, `glama.json`, `release-assets.yml`).
 
 ## [0.13.0] - 2026-10-30
 

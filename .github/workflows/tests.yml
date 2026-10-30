@@ -1,3 +1,5 @@
+# Same command as on the author's PC: test.ps1 (dotnet test, xUnit v3). Actions pinned by commit SHA; Dependabot
+# (github-actions) keeps them up to date.
 name: Tests
 
 on:
@@ -20,31 +22,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
-      - name: Prepare Python and the locked dependency cache (network allowed)
-        shell: pwsh
-        run: |
-          $env:UV_PROJECT_ENVIRONMENT = Join-Path $env:RUNNER_TEMP 'nexus-agymail-prepare'
-          uv sync --frozen --python 3.14
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: test.ps1 (ruff, pyright, unit tests against a fake Gmail API)
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: test.ps1 (engine against a fake Gmail API, sign-in against a fake Google, setup, get.ps1)
         shell: pwsh
         run: ./test.ps1
-
-  startup-linux:
-    # What MCP directories (Glama) check in a Linux container: the server starts and lists its tools. The unit tests
-    # run there too: token storage (0600 file, flock) and attachments off Windows. On every supported Python.
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python: ["3.14", "3.15"]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
-      - name: initialize + tools/list over stdio, then the unit tests
-        run: |
-          uv sync --frozen --quiet --python ${{ matrix.python }}
-          uv run --frozen pytest -q --noconftest tests/test_startup.py
-          uv run --frozen pytest -q

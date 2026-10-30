@@ -1,0 +1,107 @@
+# Release: on a vX.Y.Z tag (same version as native/Program.cs, server.json and CHANGELOG.md), runs test.ps1, builds
+# NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundle
+# nexus-agymail-X.Y.Z-win-x64.mcpb and get.ps1 (tools/package.ps1), attests their build provenance (Sigstore, keyless:
+# `gh attestation verify <file> --repo pironjulien/NexusAGYmail`), and publishes them with SHA256SUMS.txt and that
+# provenance (NexusAGYmail-X.Y.Z.intoto.jsonl, for `gh attestation verify <file> --bundle`) as the
+# "NexusAGYmail X.Y.Z" GitHub release. Then server.json, with the bundle's URL and SHA-256, goes to the official MCP
+# registry (GitHub OIDC login, namespace io.github.pironjulien; no token stored).
+# Actions pinned by commit SHA; Dependabot (github-actions) keeps them up to date.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions: {}
+
+jobs:
+  release:
+    if: github.repository == 'pironjulien/NexusAGYmail'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    outputs:
+      mcpb-sha256: ${{ steps.packages.outputs.mcpb-sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Tests (test.ps1)
+        shell: pwsh
+        run: ./test.ps1
+      - name: Packages
+        id: packages
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $server = Get-Content server.json -Raw | ConvertFrom-Json
+          if ($server.version -ne $version) { throw "server.json has version $($server.version), not $version." }
+          ./tools/package.ps1 -Version $version -Out dist
+          $mcpb = "nexus-agymail-$version-win-x64.mcpb"
+          "mcpb-sha256=$((Get-FileHash "dist/$mcpb" -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        id: provenance
+        with:
+          subject-path: dist/*
+      - name: Provenance bundle
+        shell: pwsh
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          TAG: ${{ github.ref_name }}
+        run: Copy-Item $env:BUNDLE "dist/NexusAGYmail-$($env:TAG.TrimStart('v')).intoto.jsonl"
+      - name: GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $lines = Get-Content CHANGELOG.md
+          $start = [Array]::FindIndex($lines, [Predicate[string]] { param($l) $l -like "## ``[$version``]*" })
+          if ($start -lt 0) { throw "CHANGELOG.md has no [$version] section." }
+          $end = [Array]::FindIndex($lines, $start + 1, [Predicate[string]] { param($l) $l -like '## *' })
+          if ($end -lt 0) { $end = $lines.Count }
+          $lines[($start + 1)..($end - 1)] | Set-Content notes.md -Encoding utf8NoBOM
+          gh release create $env:TAG (Get-ChildItem dist -File).FullName --title "NexusAGYmail $version" --notes-file notes.md --verify-tag
+
+  registry:
+    # server.json to the official MCP registry, with the bundle just published. mcp-publisher pinned by version and
+    # SHA-256; no token stored, no manual login.
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PUBLISHER_VERSION: v1.8.1
+      PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Bundle SHA-256 into server.json
+        env:
+          MCPB_SHA256: ${{ needs.release.outputs.mcpb-sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$MCPB_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "No bundle SHA-256"; exit 1; }
+          jq --arg sha "$MCPB_SHA256" '.packages[0].fileSha256 = $sha' server.json > server.tmp && mv server.tmp server.json
+          url=$(jq -r '.packages[0].identifier' server.json)
+          curl -fsSL -o bundle.mcpb "$url"
+          echo "$MCPB_SHA256  bundle.mcpb" | sha256sum --strict -c
+      - name: Install mcp-publisher (pinned, checksum verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --strict -c
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish server.json

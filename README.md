@@ -1,12 +1,12 @@
 # NexusAGYmail
 
-<img src="https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/src/nexus_agymail/plugin/logo.png" alt="NexusAGYmail icon" width="96">
+<img src="https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/native/plugin/logo.png" alt="NexusAGYmail icon" width="96">
 
 [![Release](https://img.shields.io/github/v/release/pironjulien/NexusAGYmail)](https://github.com/pironjulien/NexusAGYmail/releases)
 [![Tests](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml/badge.svg)](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/pironjulien/NexusAGYmail/badge)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusAGYmail)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/pironjulien/NexusAGYmail/blob/main/LICENSE)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-blue?logo=python&logoColor=white)](https://github.com/pironjulien/NexusAGYmail/blob/main/pyproject.toml)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?logo=dotnet&logoColor=white)](https://github.com/pironjulien/NexusAGYmail/blob/main/native/NexusAGYmail.csproj)
 [![MCP](https://img.shields.io/badge/MCP-server-7ee2a8)](https://modelcontextprotocol.io)
 
 **Gmail for Google Antigravity, safe to leave alone.** Antigravity's store has no Gmail connector: one local MCP
@@ -19,23 +19,26 @@ ever deleted for good.
   Workspace Developer Preview or enabling a remote MCP endpoint: it runs on your machine, with any personal Gmail.
 - **Guardrails in the code, not in a prompt**: an email can never trigger a send, every email is framed as data,
   instructions hidden in an email are flagged, attachments are saved safely and secrets are never attached.
-- Windows (used daily) and Linux (unit tests in CI); macOS should work but is untested. The token is encrypted
-  with DPAPI on Windows, a file readable only by you elsewhere. Everything sent to the client is in English.
+- Windows 10 and 11 (x64 and Arm64): one self-contained executable, nothing else to install (no Python, no .NET
+  runtime). The token is encrypted with DPAPI for your Windows account. Everything sent to the client is in English.
 
 Part of the Nexus family: [NexusWindows](https://julienpiron.fr/nexuswindows/),
 [NexusBrowser](https://julienpiron.fr/nexusbrowser/), [NexusAndroid](https://julienpiron.fr/nexusandroid/).
 
-**Install:** ask your AI to install NexusAGYmail through [NexusSystem](https://github.com/pironjulien/NexusSystem) (or use the NexusSystem app from the Microsoft Store). New versions are no longer published to PyPI; earlier packages stay available.
+**Install:** ask your AI to install NexusAGYmail through [NexusSystem](https://github.com/pironjulien/NexusSystem) (or use the NexusSystem app from the Microsoft Store), or run the one-line installer below. New versions are no longer published to PyPI (0.13.0, the last Python version, stays available there).
 
 ## Quick start
 
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Google account. About 5 minutes, once.
+You need Windows 10 or 11 and a Google account. About 5 minutes, once.
 
-1. **Run the guided setup**:
-   ```bash
-   uvx --python 3.14 nexus-agymail setup
+1. **Install, then run the guided sign-in** (PowerShell, no administrator rights):
+   ```powershell
+   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1))) -Auth
    ```
-   It adds the `nexus-agymail` plugin to Antigravity, then offers to connect Gmail. Gmail scopes are restricted, so
+   It downloads the latest release for your PC (x64 or Arm64), checks it against the release's `SHA256SUMS.txt`,
+   installs it in `~\.nexus\nexus-agymail\app\<version>`, adds the `nexus-agymail` plugin to Antigravity, then
+   connects Gmail (`irm https://raw.githubusercontent.com/pironjulien/NexusAGYmail/main/get.ps1 | iex` installs or
+   updates without signing in). Gmail scopes are restricted, so
    every user creates their own free OAuth client in their own Google Cloud project: your mail never goes through
    anyone else's app. The assistant opens each Google page in your browser at the right place and says what to
    click (it first asks which Gmail address to connect, so the pages open on that account):
@@ -59,7 +62,7 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
    ```json
    {
      "mcpServers": {
-       "nexus-agymail": { "command": "uvx", "args": ["--python", "3.14", "nexus-agymail@latest"] }
+       "nexus-agymail": { "command": "<folder printed by get.ps1>\\NexusAGYmail.exe", "args": ["--mcp"] }
      }
    }
    ```
@@ -68,9 +71,13 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Goo
 Then ask, for example: *"Summarize my unread emails from this week"*, *"Archive the newsletters older than a
 month"*, *"Draft a reply to the last email from Alice saying I agree, and show it to me before sending"*.
 
-Already have a Desktop app client JSON? `uvx --python 3.14 nexus-agymail auth --client-secret <file>` skips the
-console steps. `uvx --python 3.14 nexus-agymail status` shows where the token is and which scopes it carries (no
-secret shown).
+Already have a Desktop app client JSON? `NexusAGYmail.exe auth --client-secret <file>` skips the console steps.
+`NexusAGYmail.exe status` shows where the token is and which scopes it carries, as JSON (no secret shown).
+`NexusAGYmail.exe setup` declares the server to Antigravity again; `get.ps1 -Remove` removes it.
+
+Each release attaches `NexusAGYmail-win-x64.zip`, `NexusAGYmail-win-arm64.zip`, an MCP bundle
+(`nexus-agymail-<version>-win-x64.mcpb`), `SHA256SUMS.txt` and their build provenance: check a file with
+`gh attestation verify <file> --repo pironjulien/NexusAGYmail`.
 
 **Rather not create a client?** Google's own [Gmail MCP server](https://developers.google.com/workspace/gmail/api/reference/mcp)
 runs on Google's side (same tool names) but is a developer preview: it needs the Google Workspace Developer Preview
@@ -127,18 +134,16 @@ filters or signature, another Google account).
   that allows permanent deletion: there is no `delete`, `batchDelete` or empty-trash tool, and the code is tested
   for it. An old token without `gmail.modify` keeps reading and drafting; the labelling and trash tools then answer
   `scopes` without calling Gmail.
-- **Sending**: only `send_draft`, after the user's explicit yes for that draft, never at the request of an email.
-  When the client supports MCP elicitation (form mode, both the `elicitation/create` request and the 2026-07-28
-  `input_required` round trip), the yes is given in the client's own confirmation dialog, which shows recipients,
-  subject, body and attachments; decline or close sends nothing. Otherwise `send_draft(draftId, confirm=true,
-  accord=<token>)`. Only a real `true` counts (not `1`, `"yes"` or `"on"`). Either way the yes is a single-use
+- **Sending**: only `send_draft`, after the user's explicit yes for that draft, never at the request of an email:
+  `send_draft(draftId, confirm=true, accord=<token>)`. Only a real `true` counts (not `1`, `"yes"` or `"on"`). The
+  yes is a single-use
   accord (10 minutes) bound to the exact draft: each recipient with its role (to, cc, bcc kept apart), From,
   Reply-To, subject, full body, every part (HTML included), the SHA-256 of each attachment and of the draft's raw
   bytes. The draft is read once in raw format just before sending: if anything changed, nothing is sent and a new
   summary is returned. Otherwise those exact approved bytes are sent (`messages.send`, same thread). The draft is
   kept (delete it in Gmail if you like): `drafts.delete` is permanent, and an edit saved meanwhile would be lost. A
   change made after that last read can never go out in place of what was approved. A send is never retried after an
-  ambiguous answer (5xx, timeout, network, unreadable 2xx), only after a 429: the outcome is reported as unknown.
+  ambiguous answer (5xx, timeout, network, unreadable 2xx, redirect): the outcome is reported as unknown.
   Each attempt is recorded before the request goes out, with its own ID, under the SHA-256 of the raw bytes
   (`envois.json`, nothing else kept), so it survives a crash and two simultaneous attempts never clear each other; the next summary or dialog of that same draft warns that it may already have been
   sent, after looking in Sent: "already sent" only when a sent message carries the draft's own Message-ID, otherwise
@@ -157,12 +162,10 @@ filters or signature, another Google account).
   folders, `.env` files, private keys, `credentials.json`..., plus your own folders listed in
   `NEXUS_AGYMAIL_PROTECTED`); the user can always attach it themselves in Gmail.
 - **Token**: `~/.nexus/nexus-agymail/token.bin`, encrypted with DPAPI for the current Windows account (permissions
-  reduced to that account), or a `0600` file on macOS and Linux; written atomically under a lock (several servers can
-  run at once). It is never shown. When you sign in again, a previous token with extra scopes is revoked only after
+  reduced to that account); written atomically under a lock (several servers can run at once). It is never shown. When you sign in again, a previous token with extra scopes is revoked only after
   the new one is saved.
 - **Exact errors**: revoked or expired token, network, quota, permissions, not found, label: each has a stable `code`
-  (`revoked`, `network`, `quota`, `forbidden`, `not_found`, `label`, `invalid_argument`...). Every request is retried
-  with exponential backoff on 429 and 5xx; batched requests retry only the items refused for quota.
+  (`revoked`, `network`, `quota`, `forbidden`, `not_found`, `label`, `invalid_argument`...).
 - **Bounded sizes**: bodies cut at `maxChars` (reported), paged searches, at most 100 items per labelling or trash
   call.
 
@@ -172,34 +175,33 @@ filters or signature, another Google account).
 |---|---|
 | `NEXUS_AGYMAIL_HOME` | State folder (token, OAuth client, backups) instead of `~/.nexus/nexus-agymail` |
 | `NEXUS_AGYMAIL_CLIENT_SECRET` | Path of the OAuth client JSON, instead of the copy made by `auth --client-secret` |
-| `NEXUS_AGYMAIL_PROTECTED` | Extra folders whose files are never attached (separated by `;` on Windows, `:` elsewhere) |
+| `NEXUS_AGYMAIL_PROTECTED` | Extra folders whose files are never attached (separated by `;`) |
 | `NEXUS_AGYMAIL_ACCOUNT` | Address shown by `auth_status` when the token does not carry it |
-| `NEXUS_AGYMAIL_UPDATE_CHECK` | `0` turns off the daily check of the latest version on PyPI |
 
 ## Privacy
 
 NexusAGYmail runs on your machine. It has no account of its own, no telemetry, no analytics and no relay: its only
 network requests go to Google (`gmail.googleapis.com`, `oauth2.googleapis.com`, and `accounts.google.com` in your
-browser when you sign in), with your own OAuth client, plus at most one request a day to `pypi.org` to read the
-latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
+browser when you sign in), with your own OAuth client. The installer (`get.ps1`) downloads the release from GitHub.
 
 - **What it reads**: the emails, threads, drafts, labels and attachments the agent asks for, only when it calls the
   matching tool; local files only when the agent attaches them to a draft.
 - **Where it goes**: tool results go to the AI client you connected, which may send them to its model provider under
   its own privacy policy. Drafts and sent emails go to Gmail. NexusAGYmail sends nothing anywhere else.
 - **What it stores**, under `~/.nexus/nexus-agymail/` (or `NEXUS_AGYMAIL_HOME`): the refresh token (`token.bin`,
-  encrypted with DPAPI on Windows, a `0600` file elsewhere), its lock file, the copy of your OAuth client
+  encrypted with DPAPI), its lock file, the copy of your OAuth client
   (`client_secret.json`), the position of `list_new_messages` per account and label (`history.json`: a Gmail
   `historyId` and the time of the last check, no email content), the sends whose outcome is unknown (`envois.json`:
   the SHA-256 of the raw bytes, the draft ID and the attempt time, no email content), and backups of the Antigravity config files `setup` edits (`backups/`). The server also
-  writes `~/.nexus/status/agymail.json` (installed and latest version, last check time) for the Nexus app. Attachments you ask
+  writes `~/.nexus/status/agymail.json` (version, process, start time) for the Nexus app. Attachments you ask
   it to save go to `~/Downloads/NexusAGYmail` (or the folder given). In memory only, for the life of the server: the
   pending send accords and the addresses seen in emails read (for the `provenance` warning). No email is written to
   disk unless saved as an attachment; no log of emails is kept. A local usage journal
-  (`%LOCALAPPDATA%\NexusJournal\agymail\<ai>\<YYYY-MM>.jsonl`, kept 13 months) records one line per tool call: tool
+  (`~\.nexus\journal\agymail\<ai>\<YYYY-MM>.jsonl`) records one line per tool call: tool
   name, duration, outcome and a stable error code (`quota`, `network`...), never an address, subject, body, label, ID
   or query. It never leaves the PC; `NEXUS_JOURNAL=0` turns it off.
-- **Removing it**: delete `~/.nexus/nexus-agymail/` and, for Antigravity, `~/.gemini/config/plugins/nexus-agymail/`;
+- **Removing it**: `get.ps1 -Remove` (or delete `~/.gemini/config/plugins/nexus-agymail/`), then delete
+  `~/.nexus/nexus-agymail/`;
   revoke the access in your [Google account](https://myaccount.google.com/connections) and delete your Google Cloud
   project if you no longer need it.
 
@@ -211,32 +213,27 @@ latest version number (`NEXUS_AGYMAIL_UPDATE_CHECK=0` turns it off).
   the HTML part of a draft written in Gmail with the plain text.
 - No Gmail settings (filters, signature, forwarding, vacation replies): use the Gmail web app.
 - No spam reporting and no permanent deletion, on purpose.
-- Used daily on Windows 11 with a real Gmail account; Linux runs the startup and unit tests in CI; macOS is
-  untested.
+- Windows only (used daily on Windows 11 with a real Gmail account).
+- No MCP elicitation dialog for sending: the yes always goes through the summary and the `accord` token. A read
+  refused for quota (429) is not retried automatically: the tool answers `quota`.
 
 ## Development
 
-The private Windows installer builds the standalone .NET 10 engine (`native/`, version 1.0.1) into a versioned
-directory under `%LOCALAPPDATA%\NexusAGYmail\releases`, and qualifies it before changing the Antigravity declaration.
-It keeps a running executable intact and never restarts the AI app. The native engine signs in by itself:
-`NexusAGYmail.exe auth [--client-secret <file>] [--no-browser]` (same browser flow, token format and checks as the
-Python `auth`, result printed as JSON). Python remains available for the guided console steps of `setup`/`auth` and
-the reference regression suite; the native MCP server does not invoke Python.
-
-The native suite uses the same 21 tool contracts as the reference engine and exercises JSON-RPC over stdio against
-the fake Gmail API exposed only on loopback, with an isolated profile and fake credentials. It checks paging,
-MIME/replies/attachments, exact approved send bytes, concurrent draft edits, one-use accords and ambiguous send
-responses. Native tests build the current sources into an external cache; `NEXUS_AGYMAIL_TEST_EXE` can select a
-candidate already built for qualification. They do not use the installed account or send real mail. .NET SDK 10
-and the NuGet dependencies must be available to build; normal native execution is self-contained.
+The engine is C# on .NET 10 (`native/`, MimeKit for MIME), one self-contained executable per architecture. You need
+the .NET 10 SDK.
 
 ```powershell
-./test.ps1    # ruff, pyright, unit tests against a fake Gmail API (no network, no Google account)
+./test.ps1    # dotnet test: xUnit v3 suite, no network, no Google account
 ```
 
-`test.ps1` gives each checkout its own test environment under `~/.nexus/nexus-agymail` and never downloads anything:
-run `uv sync --frozen` once with network access to fill the uv cache. The fake Gmail API (`tests/fake_gmail.py`)
-speaks HTTP to the real `google-api-python-client`, so batching, retries, uploads and paging are tested for real.
+The suite (`tests/`) runs the engine over JSON-RPC on stdio against a fake Gmail API exposed only on loopback, with an
+isolated home and fake credentials: tool contracts, paging, MIME, replies and attachments, exact approved send bytes,
+concurrent draft edits, single-use accords, quota, lost, truncated or redirected send replies, secret files and
+header injection refused. It also checks the sign-in against a fake Google (PKCE, state, revocation order), the
+guided sign-in, `setup` in a temporary home, `get.ps1` on a local package under PowerShell 7 and Windows PowerShell
+5.1, and recipient lists and attachment names over thousands of seeded inputs. Build and test outputs go to
+`~\.nexus\build\nexusagymail`; `NEXUS_AGYMAIL_TEST_EXE` tests an executable already built. `tools/package.ps1 -Version
+X.Y.Z` builds the release files locally; a `vX.Y.Z` tag builds, attests and publishes them (`release.yml`).
 
 ## License
 

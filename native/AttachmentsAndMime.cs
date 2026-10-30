@@ -23,7 +23,7 @@ public static class AttachmentSecurity
 
     private static readonly Regex InvisibleRegex = new(@"[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]", RegexOptions.Compiled);
     private static readonly Regex ForbiddenRegex = new(@"[<>:""/\\|?*\x00-\x1f\x7f]", RegexOptions.Compiled);
-    private static readonly Regex ReservedRegex = new(@"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ReservedRegex = new(@"^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])\s*(\..*)?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly string[] SecretDirs =
     {

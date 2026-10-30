@@ -15,8 +15,10 @@ within a few days.
 - **Prompt injection**: emails are framed as data and instructions aimed at an AI are flagged, but no filter can
   recognize every manipulation. The real protection is structural: sending needs the user's yes for the exact draft,
   and no tool deletes for good. A model that ignores the framing can still read, draft, label or trash.
-- **Local token**: on Windows the refresh token is encrypted with DPAPI for the current account; on macOS and Linux it
-  is a file readable only by your account. Neither protects against malicious software running under your account.
+- **Local token**: the refresh token is encrypted with DPAPI for the current Windows account. That does not protect
+  against malicious software running under your account.
+- **Release files**: each one is listed in the release's `SHA256SUMS.txt` (checked by `get.ps1`) and carries a
+  Sigstore build provenance: `gh attestation verify <file> --repo pironjulien/NexusAGYmail`.
 - **Your OAuth client**: it lives in your own Google Cloud project; anyone with its JSON and your consent could use it.
   Keep it private, and revoke access in your Google account if it leaks.
 

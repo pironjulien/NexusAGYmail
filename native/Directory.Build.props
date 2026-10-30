@@ -1,9 +1,9 @@
 <Project>
+  <!-- Every build output of the engine goes to ~\.nexus\build\nexusagymail\native: never into OneDrive or AppData. -->
   <PropertyGroup>
-    <LocalBuildRoot>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))\NexusAGYmail\build</LocalBuildRoot>
-    <BaseOutputPath>$(LocalBuildRoot)\bin\</BaseOutputPath>
-    <BaseIntermediateOutputPath>$(LocalBuildRoot)\obj\</BaseIntermediateOutputPath>
-    <MSBuildProjectExtensionsPath>$(LocalBuildRoot)\obj\</MSBuildProjectExtensionsPath>
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+    <NexusBuild Condition="'$(NexusBuild)' == ''">$(USERPROFILE)\.nexus\build\nexusagymail\</NexusBuild>
+    <BaseOutputPath>$(NexusBuild)native\bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(NexusBuild)native\obj\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
   </PropertyGroup>
 </Project>
