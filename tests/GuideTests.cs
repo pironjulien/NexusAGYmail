@@ -7,8 +7,8 @@ namespace NexusAGYmail.Tests;
 public sealed class GuideTests : IDisposable
 {
     private readonly string root = Support.NewTemp("guide");
-    private string Downloads => Path.Combine(root, "Downloads");
-    private string State => Path.Combine(root, "state");
+    private string Downloads => Path.Join(root, "Downloads");
+    private string State => Path.Join(root, "state");
     private readonly List<string> said = [];
     private readonly List<string> opened = [];
     private readonly Queue<string> answers = new();
@@ -47,12 +47,12 @@ public sealed class GuideTests : IDisposable
     public void Newest_desktop_client_only_since_the_start()
     {
         DateTime since = DateTime.UtcNow.AddMinutes(-1);
-        string old = Path.Combine(Downloads, "client_secret_old.json");
+        string old = Path.Join(Downloads, "client_secret_old.json");
         File.WriteAllText(old, Desktop("old"));
         File.SetLastWriteTimeUtc(old, since.AddMinutes(-10));
-        File.WriteAllText(Path.Combine(Downloads, "client_secret_web.json"), "{\"web\":{\"client_id\":\"w\"}}");
+        File.WriteAllText(Path.Join(Downloads, "client_secret_web.json"), "{\"web\":{\"client_id\":\"w\"}}");
         Assert.Null(Guide.NewestClient(Downloads, since));
-        string fresh = Path.Combine(Downloads, "client_secret_new.json");
+        string fresh = Path.Join(Downloads, "client_secret_new.json");
         File.WriteAllText(fresh, Desktop("p1"));
         Assert.Equal(fresh, Guide.NewestClient(Downloads, since));
     }
@@ -64,7 +64,7 @@ public sealed class GuideTests : IDisposable
         string? signedWith = null;
         var guide = new Guide(Io(
             signIn: (client, _, account, _) => { signedWith = client.ClientId + "|" + account; return Result(); },
-            onSleep: () => File.WriteAllText(Path.Combine(Downloads, "client_secret_123.json"), Desktop("p1"))));
+            onSleep: () => File.WriteAllText(Path.Join(Downloads, "client_secret_123.json"), Desktop("p1"))));
         Assert.Equal(0, guide.Run("", openBrowser: true, interactive: true));
         Assert.Equal([Guide.ProjectCreate, Guide.EnableGmail, Guide.Branding, Guide.Audience, Guide.ClientCreate],
             opened.Select(u => u.Split("?authuser=")[0].Split("&authuser=")[0]));
@@ -97,7 +97,7 @@ public sealed class GuideTests : IDisposable
     [Fact]
     public void A_given_non_desktop_client_is_refused()
     {
-        string web = Path.Combine(root, "web.json");
+        string web = Path.Join(root, "web.json");
         File.WriteAllText(web, "{\"web\":{\"client_id\":\"w\"}}");
         Assert.Equal(1, new Guide(Io()).Run(web, openBrowser: false, interactive: false));
         Assert.False(File.Exists(OAuthSignIn.ClientSecretTarget(State)));

@@ -21,8 +21,8 @@ public sealed class CommandLineTests : IDisposable
     public CommandLineTests() => environment = Support.IsolatedEnvironment(home);
     public void Dispose() => Support.Delete(home);
 
-    private string Gemini => Path.Combine(home, ".gemini", "config");
-    private string PluginConfig => Path.Combine(Gemini, "plugins", "nexus-agymail", "mcp_config.json");
+    private string Gemini => Path.Join(home, ".gemini", "config");
+    private string PluginConfig => Path.Join(Gemini, "plugins", "nexus-agymail", "mcp_config.json");
 
     [Fact]
     public void Tools_list_over_stdio_matches_the_embedded_contracts()
@@ -32,7 +32,7 @@ public sealed class CommandLineTests : IDisposable
         Assert.Equal("nexus-agymail", init["result"]!["serverInfo"]!["name"]!.GetValue<string>());
         Assert.Equal("2025-06-18", init["result"]!["protocolVersion"]!.GetValue<string>());
         var tools = server.Rpc("tools/list")["result"]!["tools"]!.AsArray();
-        var contracts = JsonNode.Parse(File.ReadAllText(Path.Combine(Support.Repository, "native", "tool-contracts.json")))!;
+        var contracts = JsonNode.Parse(File.ReadAllText(Path.Join(Support.Repository, "native", "tool-contracts.json")))!;
         Assert.True(JsonNode.DeepEquals(contracts, tools), "tools/list differs from native/tool-contracts.json");
         Assert.Equal(ExpectedTools.Order(), tools.Select(t => t!["name"]!.GetValue<string>()).Order());
         foreach (var tool in tools)
@@ -48,14 +48,14 @@ public sealed class CommandLineTests : IDisposable
     {
         string root = Support.Repository;
         Assert.Equal($"NexusAGYmail {Program.Version}", Support.Run(environment, "--version").Out.Trim());
-        var csproj = Regex.Match(File.ReadAllText(Path.Combine(root, "native", "NexusAGYmail.csproj")), "<Version>([^<]+)</Version>");
+        var csproj = Regex.Match(File.ReadAllText(Path.Join(root, "native", "NexusAGYmail.csproj")), "<Version>([^<]+)</Version>");
         Assert.Equal(Program.Version, csproj.Groups[1].Value);
-        var plugin = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "native", "plugin", "plugin.json")))!;
+        var plugin = JsonNode.Parse(File.ReadAllText(Path.Join(root, "native", "plugin", "plugin.json")))!;
         Assert.Equal(Program.Version, plugin["version"]!.GetValue<string>());
-        Assert.Contains($"(nexus-agymail {Program.Version})", File.ReadAllText(Path.Combine(root, "native", "plugin", "skills", "nexus-agymail", "SKILL.md")));
-        var changelog = Regex.Match(File.ReadAllText(Path.Combine(root, "CHANGELOG.md")), @"^## \[(\d+\.\d+\.\d+)\]", RegexOptions.Multiline);
+        Assert.Contains($"(nexus-agymail {Program.Version})", File.ReadAllText(Path.Join(root, "native", "plugin", "skills", "nexus-agymail", "SKILL.md")));
+        var changelog = Regex.Match(File.ReadAllText(Path.Join(root, "CHANGELOG.md")), @"^## \[(\d+\.\d+\.\d+)\]", RegexOptions.Multiline);
         Assert.Equal(Program.Version, changelog.Groups[1].Value);
-        var server = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "server.json")))!;
+        var server = JsonNode.Parse(File.ReadAllText(Path.Join(root, "server.json")))!;
         Assert.Equal(Program.Version, server["version"]!.GetValue<string>());
         Assert.Contains($"/releases/download/v{Program.Version}/", server["packages"]![0]!["identifier"]!.GetValue<string>());
     }
@@ -64,10 +64,10 @@ public sealed class CommandLineTests : IDisposable
     public void The_shared_guardrail_policy_is_embedded_unchanged()
     {
         string root = Support.Repository;
-        var manifest = File.ReadAllLines(Path.Combine(root, "vendored.sha256")).Where(l => l.Trim().Length > 0)
+        var manifest = File.ReadAllLines(Path.Join(root, "vendored.sha256")).Where(l => l.Trim().Length > 0)
             .Select(l => l.Split("  ", 2)).ToDictionary(p => p[1], p => p[0]);
         Assert.Equal(["native/garde-fous.json"], manifest.Keys);
-        byte[] bytes = File.ReadAllBytes(Path.Combine(root, "native", "garde-fous.json"));
+        byte[] bytes = File.ReadAllBytes(Path.Join(root, "native", "garde-fous.json"));
         string lf = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(System.Text.Encoding.UTF8.GetString(bytes).ReplaceLineEndings("\n"))));
         Assert.Equal(manifest["native/garde-fous.json"], lf);
         using var embedded = typeof(Program).Assembly.GetManifestResourceStream("garde-fous.json")!;
@@ -92,7 +92,7 @@ public sealed class CommandLineTests : IDisposable
         var (code, _, error) = Support.Run(environment, "auth", "--no-browser");
         Assert.Equal(1, code);
         Assert.Contains("--client-secret", error);
-        environment["NEXUS_AGYMAIL_CLIENT_SECRET"] = Path.Combine(home, "absent.json");
+        environment["NEXUS_AGYMAIL_CLIENT_SECRET"] = Path.Join(home, "absent.json");
         (code, _, error) = Support.Run(environment, "auth", "--no-browser");
         Assert.Equal(1, code);
         Assert.Contains("NEXUS_AGYMAIL_CLIENT_SECRET points to a missing file", error);
@@ -108,16 +108,16 @@ public sealed class CommandLineTests : IDisposable
         Assert.Equal(0, code);
         Assert.Contains("Antigravity not found", output);
         Assert.Equal("NEXUS_PACK_RESULT sign-in=to do", output.Trim().Split('\n')[^1].Trim());
-        Assert.False(Directory.Exists(Path.Combine(home, ".gemini")));
+        Assert.False(Directory.Exists(Path.Join(home, ".gemini")));
     }
 
     [Fact]
     public void Setup_writes_the_plugin_replaces_old_entries_and_keeps_env()
     {
-        Directory.CreateDirectory(Path.Combine(Gemini, "plugins", "nexus-agymail"));
+        Directory.CreateDirectory(Path.Join(Gemini, "plugins", "nexus-agymail"));
         // An earlier public install (uvx) in the plugin, and an old global entry of ours next to someone else's server.
         File.WriteAllText(PluginConfig, """{"mcpServers":{"nexus-agymail":{"command":"C:\\u\\uvx.exe","args":["--python","3.14","nexus-agymail@latest"],"env":{"NEXUS_AGYMAIL_PROTECTED":"D:\\vault"}}}}""");
-        File.WriteAllText(Path.Combine(Gemini, "mcp_config.json"), """{"mcpServers":{"nexus-agymail":{"command":"uvx","args":["nexus-agymail"]},"other":{"command":"x"}}}""");
+        File.WriteAllText(Path.Join(Gemini, "mcp_config.json"), """{"mcpServers":{"nexus-agymail":{"command":"uvx","args":["nexus-agymail"]},"other":{"command":"x"}}}""");
         environment["NEXUS_PACK"] = "1";
         var (code, output, _) = Support.Run(environment, "setup");
         Assert.Equal(0, code);
@@ -129,12 +129,12 @@ public sealed class CommandLineTests : IDisposable
         Assert.Equal(["--mcp"], entry["args"]!.AsArray().Select(a => a!.GetValue<string>()));
         Assert.Equal("D:\\vault", entry["env"]!["NEXUS_AGYMAIL_PROTECTED"]!.GetValue<string>());
         foreach (var (relative, bytes) in Registration.PluginFiles())
-            Assert.Equal(bytes, File.ReadAllBytes(Path.Combine(Gemini, "plugins", "nexus-agymail", relative)));
+            Assert.Equal(bytes, File.ReadAllBytes(Path.Join(Gemini, "plugins", "nexus-agymail", relative)));
         Assert.Contains(Registration.PluginFiles(), f => f.Path == "skills/nexus-agymail/SKILL.md");
         Assert.Contains(Registration.PluginFiles(), f => f.Path == "plugin.json");
-        var global = JsonNode.Parse(File.ReadAllText(Path.Combine(Gemini, "mcp_config.json")))!["mcpServers"]!.AsObject();
+        var global = JsonNode.Parse(File.ReadAllText(Path.Join(Gemini, "mcp_config.json")))!["mcpServers"]!.AsObject();
         Assert.Equal(["other"], global.Select(kv => kv.Key));
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(home, ".nexus", "nexus-agymail", "backups")));
+        Assert.NotEmpty(Directory.GetFiles(Path.Join(home, ".nexus", "nexus-agymail", "backups")));
 
         output = Support.Run(environment, "setup").Out;
         Assert.Contains("Antigravity: plugin (already installed)", output);
@@ -146,7 +146,7 @@ public sealed class CommandLineTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(PluginConfig)!);
         const string mine = """{"mcpServers":{"nexus-agymail":{"command":"node","args":["my-gmail.js"]}}}""";
         File.WriteAllText(PluginConfig, mine);
-        File.WriteAllText(Path.Combine(Gemini, "config.json"), """{"plugins":{"nexus-agymail":{"enabled":false}}}""");
+        File.WriteAllText(Path.Join(Gemini, "config.json"), """{"plugins":{"nexus-agymail":{"enabled":false}}}""");
         environment["NEXUS_PACK"] = "1";
         var (code, output, _) = Support.Run(environment, "setup");
         Assert.Equal(0, code);

@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.4] - 2026-10-31
+
+### Changed
+- Code quality pass on the CodeQL findings, behaviour unchanged: disposable locals (draft MIME messages, the
+  sign-in loopback listener, the multipart buffer) are disposed; one-line statements that looked nested are split;
+  catch blocks name the exceptions they expect, and the deliberate boundaries that report any failure say so;
+  LINQ filters replace loop-and-test patterns; `Path.Join` replaces `Path.Combine` wherever no later segment can
+  be rooted (`Combine` is kept where a file name from outside is joined).
+
 ## [0.15.3] - 2026-10-31
 
 ### Changed

@@ -140,7 +140,8 @@ public sealed class FakeGmail : IAsyncDisposable
     /// <summary>Message as Gmail stores it, from the raw bytes a client sent.</summary>
     public static JsonObject DraftMessage(string messageId, byte[] raw, string? threadId)
     {
-        var parsed = MimeMessage.Load(new MemoryStream(raw));
+        using var stream = new MemoryStream(raw);
+        using var parsed = MimeMessage.Load(stream);
         string plain = parsed.TextBody ?? "";
         return new JsonObject
         {
@@ -156,7 +157,7 @@ public sealed class FakeGmail : IAsyncDisposable
     /// <summary>A draft already in Gmail (written by the user), with an optional PDF attachment.</summary>
     public void StoredDraft(string draftId, string text, string attachment = "")
     {
-        var message = new MimeMessage();
+        using var message = new MimeMessage();
         message.To.Add(MailboxAddress.Parse("Bob <bob@example.com>"));
         message.Subject = "Devis signé";
         var body = new TextPart("plain") { Text = text + "\n" };
@@ -180,7 +181,7 @@ public sealed class FakeGmail : IAsyncDisposable
     /// <summary>A message arriving in the inbox (from Alice), recorded in the history.</summary>
     public JsonObject Received(string messageId, string text = "Bonjour", string subject = "Objet")
     {
-        var mime = new MimeMessage();
+        using var mime = new MimeMessage();
         mime.From.Add(MailboxAddress.Parse("Alice <alice@example.com>"));
         mime.To.Add(MailboxAddress.Parse("test@example.com"));
         mime.Subject = subject;
@@ -416,7 +417,7 @@ public sealed class FakeGmail : IAsyncDisposable
                 int first = int.Parse(Q(query, "pageToken", "0"));
                 int size = int.Parse(Q(query, "maxResults", "100"));
                 var history = new JsonObject { ["historyId"] = HistoryId.ToString() };
-                var page = records.Skip(first).Take(size).Select(r => (JsonNode)r.DeepClone()).ToArray();
+                var page = records.Skip(first).Take(size).Select(r => r.DeepClone()).ToArray();
                 if (page.Length > 0) history["history"] = new JsonArray(page);
                 if (first + size < records.Count) history["nextPageToken"] = (first + size).ToString();
                 return (200, history);
@@ -426,7 +427,7 @@ public sealed class FakeGmail : IAsyncDisposable
                     ? (200, new JsonObject { ["attachmentId"] = segments[3], ["size"] = blob.Length, ["data"] = B64(blob) })
                     : Missing();
             case "labels":
-                return (200, new JsonObject { ["labels"] = new JsonArray(Labels.Select(l => (JsonNode)l.DeepClone()).ToArray()) });
+                return (200, new JsonObject { ["labels"] = new JsonArray(Labels.Select(l => l.DeepClone()).ToArray()) });
             case "label-create":
             {
                 string name = data["name"]!.GetValue<string>();
@@ -441,8 +442,8 @@ public sealed class FakeGmail : IAsyncDisposable
                 var known = Labels.Select(l => l["id"]!.GetValue<string>()).ToHashSet();
                 if (Strings(data["addLabelIds"]).Concat(Strings(data["removeLabelIds"])).Any(i => !known.Contains(i)))
                     return (400, new JsonObject { ["error"] = new JsonObject { ["code"] = 400, ["message"] = "Invalid label" } });
-                foreach (string id in Strings(data["ids"]))
-                    if (Messages.TryGetValue(id, out var m)) Relabel(m, data);
+                foreach (var m in Strings(data["ids"]).Select(id => Messages.GetValueOrDefault(id)).OfType<JsonObject>())
+                    Relabel(m, data);
                 return (204, new JsonObject());
             }
             case "message-modify" or "message-trash" or "message-untrash":

@@ -69,7 +69,7 @@ internal sealed class StateFile
     public StateFile(string path) { this.path = path; Directory.CreateDirectory(Path.GetDirectoryName(path)!); }
     private sealed class Lease(FileStream stream) : IDisposable
     {
-        public void Dispose() { try { stream.Unlock(0, 1); } finally { stream.Dispose(); } }
+        public void Dispose() { using (stream) stream.Unlock(0, 1); }
     }
     private IDisposable Lock()
     {
@@ -101,7 +101,7 @@ internal sealed class StateFile
 public sealed class EnvoisTracker
 {
     private readonly StateFile file;
-    public EnvoisTracker(string? nexusDir = null) => file = new(Path.Combine(nexusDir ?? GmailAuth.GetNexusDir(), "envois.json"));
+    public EnvoisTracker(string? nexusDir = null) => file = new(Path.Join(nexusDir ?? GmailAuth.GetNexusDir(), "envois.json"));
     private static JsonObject Attempts(JsonNode? entry)
     {
         if (entry?["attempts"] is JsonObject attempts) return (JsonObject)attempts.DeepClone();
@@ -134,7 +134,7 @@ public sealed class EnvoisTracker
 public sealed class HistoryTracker
 {
     private readonly StateFile file;
-    public HistoryTracker(string? nexusDir = null) => file = new(Path.Combine(nexusDir ?? GmailAuth.GetNexusDir(), "history.json"));
+    public HistoryTracker(string? nexusDir = null) => file = new(Path.Join(nexusDir ?? GmailAuth.GetNexusDir(), "history.json"));
     private static JsonObject Entry(JsonObject data, string account, string label) =>
         data[account.ToLowerInvariant()]?["labels"]?[string.IsNullOrEmpty(label) ? "*" : label] as JsonObject ?? new();
     public JsonObject Load(string account, string label) => file.Transaction(data => (JsonObject)Entry(data, account, label).DeepClone());
@@ -171,7 +171,7 @@ public static class DraftAccord
     public static string ComputeFingerprint(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     public static string IssueAccord(string sha, string context = "")
     {
-        foreach (var pair in PendingTokens) if (pair.Value.Expires < DateTimeOffset.UtcNow) PendingTokens.TryRemove(pair.Key, out _);
+        foreach (var pair in PendingTokens.Where(pair => pair.Value.Expires < DateTimeOffset.UtcNow)) PendingTokens.TryRemove(pair.Key, out _);
         string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         PendingTokens[token] = new(sha, context, DateTimeOffset.UtcNow.AddSeconds(MailPolicy.AccordSeconds));
         return token;

@@ -47,7 +47,7 @@ public static class AttachmentSecurity
     public static string DefaultDownloadDirectory()
     {
         string userProfile = GmailAuth.HomeDir();
-        return Path.Combine(userProfile, "Downloads", "NexusAGYmail");
+        return Path.Join(userProfile, "Downloads", "NexusAGYmail");
     }
 
     public static bool IsSecretName(string filename)
@@ -80,30 +80,25 @@ public static class AttachmentSecurity
             string userProfile = GmailAuth.HomeDir();
             foreach (var relDir in SecretDirs)
             {
-                string secretDirPath = Canonical(Path.Combine(userProfile, relDir.Replace('/', Path.DirectorySeparatorChar)));
-                if (resolved.StartsWith(secretDirPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (resolved.Length == secretDirPath.Length || resolved[secretDirPath.Length] == Path.DirectorySeparatorChar)
-                        return true;
-                }
+                string secretDirPath = Canonical(Path.Join(userProfile, relDir.Replace('/', Path.DirectorySeparatorChar)));
+                if (resolved.StartsWith(secretDirPath, StringComparison.OrdinalIgnoreCase)
+                    && (resolved.Length == secretDirPath.Length || resolved[secretDirPath.Length] == Path.DirectorySeparatorChar))
+                    return true;
             }
 
             string? extra = Environment.GetEnvironmentVariable(ProtectedEnv);
             if (!string.IsNullOrEmpty(extra))
             {
                 var parts = extra.Split(new[] { Path.PathSeparator, ';' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var p in parts)
+                foreach (string extraPath in parts.Select(p => Canonical(p.Trim())))
                 {
-                    string extraPath = Canonical(p.Trim());
-                    if (resolved.StartsWith(extraPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (resolved.Length == extraPath.Length || resolved[extraPath.Length] == Path.DirectorySeparatorChar)
-                            return true;
-                    }
+                    if (resolved.StartsWith(extraPath, StringComparison.OrdinalIgnoreCase)
+                        && (resolved.Length == extraPath.Length || resolved[extraPath.Length] == Path.DirectorySeparatorChar))
+                        return true;
                 }
             }
         }
-        catch
+        catch  // fail closed: any path that cannot be resolved is treated as protected
         {
             return true;
         }
@@ -208,7 +203,7 @@ public static class AttachmentSecurity
         Directory.CreateDirectory(targetDir);
         string cleanName = SafeName(filename);
         string freePath;
-        string tempPath = Path.Combine(targetDir, ".nexus-agymail-" + Guid.NewGuid().ToString("N") + ".part");
+        string tempPath = Path.Join(targetDir, ".nexus-agymail-" + Guid.NewGuid().ToString("N") + ".part");
         try
         {
             File.WriteAllBytes(tempPath, content);
@@ -228,7 +223,7 @@ public static class AttachmentSecurity
                 string zoneStream = freePath + ":Zone.Identifier";
                 File.WriteAllText(zoneStream, ZoneIdentifierContent, Encoding.ASCII);
             }
-            catch
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
             {
                 // Silently ignore if alternate data streams are not supported (e.g. FAT32)
             }
@@ -323,9 +318,8 @@ public static class MimeHelper
         var parts = clean.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
         var resultList = new List<string>();
 
-        foreach (var p in parts)
+        foreach (string item in parts.Select(p => p.Trim()))
         {
-            string item = p.Trim();
             if (string.IsNullOrEmpty(item)) continue;
             try
             {
@@ -386,13 +380,14 @@ public static class MimeHelper
         sb.Append(body ?? "");
         sb.Append("\r\n");
 
-        var byteStream = new MemoryStream();
+        using var byteStream = new MemoryStream();
         byte[] preHeaderBytes = Encoding.UTF8.GetBytes(sb.ToString());
         byteStream.Write(preHeaderBytes, 0, preHeaderBytes.Length);
 
+        var partHeader = new StringBuilder();
         foreach (var att in attachments)
         {
-            var partHeader = new StringBuilder();
+            partHeader.Clear();
             partHeader.Append($"--{boundary}\r\n");
             partHeader.Append($"Content-Type: {att.MimeType}; name=\"{EscapeHeaderParam(att.Name)}\"\r\n");
             partHeader.Append($"Content-Disposition: attachment; filename=\"{EscapeHeaderParam(att.Name)}\"\r\n");
@@ -449,7 +444,7 @@ public static class MimeHelper
                 string text = Encoding.UTF8.GetString(decoded);
                 sb.AppendLine(text);
             }
-            catch { }
+            catch (FormatException) { /* undecodable part: skipped */ }
         }
         else if (mimeType.Equals("text/html", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(rawData) && sb.Length == 0)
         {
@@ -459,14 +454,14 @@ public static class MimeHelper
                 string html = Encoding.UTF8.GetString(decoded);
                 sb.AppendLine(HtmlToPlainText(html));
             }
-            catch { }
+            catch (FormatException) { /* undecodable part: skipped */ }
         }
 
         if (node["parts"] is JsonArray parts)
         {
-            foreach (var p in parts)
+            foreach (var p in parts.OfType<JsonNode>())
             {
-                if (p != null) ExtractPartsRecursive(p, sb);
+                ExtractPartsRecursive(p, sb);
             }
         }
     }

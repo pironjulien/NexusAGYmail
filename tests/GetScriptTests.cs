@@ -10,19 +10,18 @@ namespace NexusAGYmail.Tests;
 public sealed class GetScriptTests : IDisposable
 {
     private readonly string root = Support.NewTemp("get");
-    private string Home => Path.Combine(root, "home");
-    private string Apps => Path.Combine(root, "app");
-    private string Zip => Path.Combine(root, "NexusAGYmail-win-x64.zip");
+    private string Home => Path.Join(root, "home");
+    private string Apps => Path.Join(root, "app");
+    private string Zip => Path.Join(root, "NexusAGYmail-win-x64.zip");
 
     public GetScriptTests()
     {
-        Directory.CreateDirectory(Path.Combine(Home, ".gemini", "config"));
+        Directory.CreateDirectory(Path.Join(Home, ".gemini", "config"));
         // The engine the tests run, with what it needs next to it (framework-dependent here, self-contained in a release).
         string engine = Path.GetDirectoryName(Path.GetFullPath(Support.Exe))!;
         using var zip = ZipFile.Open(Zip, ZipArchiveMode.Create);
-        foreach (string file in Directory.GetFiles(engine))
-            if (!Path.GetFileName(file).StartsWith("NexusAGYmail.Tests", StringComparison.OrdinalIgnoreCase))
-                zip.CreateEntryFromFile(file, Path.GetFileName(file));
+        foreach (string file in Directory.GetFiles(engine).Where(f => !Path.GetFileName(f).StartsWith("NexusAGYmail.Tests", StringComparison.OrdinalIgnoreCase)))
+            zip.CreateEntryFromFile(file, Path.GetFileName(file));
     }
 
     public void Dispose() => Support.Delete(root);
@@ -34,7 +33,7 @@ public sealed class GetScriptTests : IDisposable
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             RedirectStandardInput = true,
         };
-        foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(Support.Repository, "get.ps1") }.Concat(args))
+        foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Join(Support.Repository, "get.ps1") }.Concat(args))
             info.ArgumentList.Add(a);
         foreach (var (key, value) in Support.IsolatedEnvironment(Home))
         {
@@ -60,9 +59,9 @@ public sealed class GetScriptTests : IDisposable
         var (code, output) = Get(shell);
         Assert.True(code == 0, output);
         Assert.Equal("NEXUS_PACK_RESULT Antigravity=plugin; sign-in=to do", output.Trim().Split('\n')[^1].Trim());
-        string installed = Path.Combine(Apps, Program.Version, "NexusAGYmail.exe");
+        string installed = Path.Join(Apps, Program.Version, "NexusAGYmail.exe");
         Assert.True(File.Exists(installed), output);
-        string config = Path.Combine(Home, ".gemini", "config", "plugins", "nexus-agymail", "mcp_config.json");
+        string config = Path.Join(Home, ".gemini", "config", "plugins", "nexus-agymail", "mcp_config.json");
         Assert.Equal(installed, JsonNode.Parse(File.ReadAllText(config))!["mcpServers"]!["nexus-agymail"]!["command"]!.GetValue<string>(), ignoreCase: true);
 
         Assert.True(Get(shell).Code == 0, "a second run (update) must succeed");
@@ -79,9 +78,9 @@ public sealed class GetScriptTests : IDisposable
     {
         // Microsoft Defender flags these forms (Trojan:Win32/Commando.A!ml): install by files and -File only.
         var forbidden = new System.Text.RegularExpressions.Regex(@"\birm\b|\biex\b|Invoke-Expression|scriptblock\]::Create|EncodedCommand", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        var files = new[] { "README.md", "get.ps1", "install.ps1", "test.ps1", Path.Combine("tools", "package.ps1") }
-            .Select(f => Path.Combine(Support.Repository, f)).Where(File.Exists)
-            .Concat(Directory.GetFiles(Path.Combine(Support.Repository, ".github", "workflows")));
+        var files = new[] { "README.md", "get.ps1", "install.ps1", "test.ps1", Path.Join("tools", "package.ps1") }
+            .Select(f => Path.Join(Support.Repository, f)).Where(File.Exists)
+            .Concat(Directory.GetFiles(Path.Join(Support.Repository, ".github", "workflows")));
         foreach (string file in files)
         {
             var lines = File.ReadAllLines(file).Select((l, i) => (l, i)).Where(x => forbidden.IsMatch(x.l)).ToList();
@@ -93,7 +92,7 @@ public sealed class GetScriptTests : IDisposable
     public void A_test_package_never_installs_for_real()
     {
         var info = new ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (string a in new[] { "-NoProfile", "-File", Path.Combine(Support.Repository, "get.ps1") })
+        foreach (string a in new[] { "-NoProfile", "-File", Path.Join(Support.Repository, "get.ps1") })
             info.ArgumentList.Add(a);
         info.Environment["USERPROFILE"] = Home;
         info.Environment["NEXUS_AGYMAIL_SOURCE"] = Zip;
@@ -103,6 +102,6 @@ public sealed class GetScriptTests : IDisposable
         process.WaitForExit();
         Assert.Equal(1, process.ExitCode);
         Assert.Contains("refusing to install for real", output);
-        Assert.False(Directory.Exists(Path.Combine(Home, ".nexus", "nexus-agymail", "app")));
+        Assert.False(Directory.Exists(Path.Join(Home, ".nexus", "nexus-agymail", "app")));
     }
 }

@@ -61,7 +61,7 @@ public sealed class AuthFlowTests : IDisposable
 
     private Scenario Play(Scenario s, string name)
     {
-        var store = new TokenStore(Path.Combine(root, name));
+        var store = new TokenStore(Path.Join(root, name));
         s.Store = store;
         if (s.OldToken is not null)
             store.Save(s.OldToken);
@@ -142,7 +142,7 @@ public sealed class AuthFlowTests : IDisposable
         };
 
         try { s.Result = flow.RunAsync(store, Client, openBrowser: true, loginHint: "", s.Cancel).GetAwaiter().GetResult(); }
-        catch (Exception ex) { s.Error = ex; }
+        catch (Exception ex) { s.Error = ex; }  // any failure is the outcome the scenario asserts on
         try { browser.Wait(TimeSpan.FromSeconds(10)); }
         catch (AggregateException) { /* browser cut by a refusal: the refusal is checked by the test */ }
         return s;
@@ -255,15 +255,15 @@ public sealed class AuthFlowTests : IDisposable
     [Fact]
     public void Client_secret_copy_refusal_and_missing_file()
     {
-        string state = Path.Combine(root, "state");
+        string state = Path.Join(root, "state");
         Directory.CreateDirectory(state);
-        string web = Path.Combine(root, "client_web.json");
+        string web = Path.Join(root, "client_web.json");
         File.WriteAllText(web, "{\"web\":{\"client_id\":\"x\"}}");
         var refused = Assert.Throws<ArgumentException>(() => OAuthSignIn.SaveClient(web, state));
         Assert.Contains("is not a Desktop app OAuth client", refused.Message);
         Assert.False(File.Exists(OAuthSignIn.ClientSecretTarget(state)));
 
-        string desktop = Path.Combine(root, "client_secret_123.json");
+        string desktop = Path.Join(root, "client_secret_123.json");
         File.WriteAllText(desktop, "\uFEFF{\"installed\":{\"client_id\":\"cid\",\"client_secret\":\"cs\",\"project_id\":\"p1\",\"token_uri\":\"" + TokenUri + "\"}}");
         var (target, project) = OAuthSignIn.SaveClient(desktop, state);
         var loaded = OAuthSignIn.LoadClientConfig(target);

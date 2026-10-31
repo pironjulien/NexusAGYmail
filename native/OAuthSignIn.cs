@@ -66,7 +66,7 @@ public sealed class OAuthSignIn
 
     /// <summary>Où `auth --client-secret` copie le client OAuth.</summary>
     public static string ClientSecretTarget(string? stateDir = null) =>
-        Path.Combine(stateDir ?? GmailAuth.GetNexusDir(), "client_secret.json");
+        Path.Join(stateDir ?? GmailAuth.GetNexusDir(), "client_secret.json");
 
     /// <summary>Localise le client OAuth Desktop (NEXUS_AGYMAIL_CLIENT_SECRET, sinon le dossier d'état) sans le lire.</summary>
     public static string GetClientSecretPath(string? stateDir = null)
@@ -117,7 +117,7 @@ public sealed class OAuthSignIn
         {
             File.Copy(full, target, overwrite: true);
             try { Dpapi.RestrictToCurrentUser(target); }
-            catch (Exception) { /* droits au mieux : le fichier reste dans le dossier d'état de l'utilisateur */ }
+            catch (DpapiError) { /* droits au mieux : le fichier reste dans le dossier d'état de l'utilisateur */ }
         }
         return (target, ProjectOf(data));
     }
@@ -214,26 +214,21 @@ public sealed class OAuthSignIn
         string code;
         string redirectUri;
 
-        var listener = new TcpListener(IPAddress.Loopback, 0) { ExclusiveAddressUse = true };
-        listener.Start();
-        try
+        using (var listener = new TcpListener(IPAddress.Loopback, 0) { ExclusiveAddressUse = true })
         {
+            listener.Start();
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;
             redirectUri = $"http://127.0.0.1:{port}/";
             string url = BuildAuthorizationUrl(client, redirectUri, state, CodeChallenge(verifier), loginHint);
             if (openBrowser)
             {
                 try { OpenBrowser(url); }
-                catch (Exception ex) { Log.WriteLine($"Browser not opened ({ex.Message}): use the URL below."); }
+                catch (Exception ex) { Log.WriteLine($"Browser not opened ({ex.Message}): use the URL below."); }  // any failure: the URL is printed
             }
             Log.WriteLine($"Sign in to Google in your browser (if it did not open, visit this URL):\n{url}");
             Log.Flush();
             code = await WaitForCodeAsync(listener, state, ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            listener.Stop();
-        }
+        }  // Dispose stops the listener, as before on every path
 
         var tokenResponse = await ExchangeCodeAsync(client, code, redirectUri, verifier, ct).ConfigureAwait(false);
         var info = BuildTokenInfo(tokenResponse, client);
@@ -451,7 +446,7 @@ public sealed class OAuthSignIn
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex)  // network boundary: every transport failure becomes one sign-in error
         {
             throw new GmailAuthError("network", $"network: the sign-in code could not be exchanged ({ex.Message})");
         }

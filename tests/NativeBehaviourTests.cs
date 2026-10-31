@@ -10,13 +10,13 @@ public sealed class Mailbox : IAsyncDisposable
 {
     public FakeGmail Fake { get; } = new();
     public string Home { get; } = Support.NewTemp("home");
-    public string State => Path.Combine(Home, ".nexus", "nexus-agymail");
+    public string State => Path.Join(Home, ".nexus", "nexus-agymail");
     public NativeServer Server { get; }
 
     public Mailbox(string protocolVersion = "2026-07-28", JsonObject? capabilities = null)
     {
         Directory.CreateDirectory(State);
-        File.WriteAllText(Path.Combine(State, "token.json"), Support.TestToken(FakeGmail.NewScopes).ToJsonString());
+        File.WriteAllText(Path.Join(State, "token.json"), Support.TestToken(FakeGmail.NewScopes).ToJsonString());
         var environment = Support.IsolatedEnvironment(Home);
         environment["NEXUS_AGYMAIL_API_BASE"] = Fake.ApiBase;
         environment["NEXUS_AGYMAIL_TOKEN_URI"] = Fake.BaseUrl + "/never-refresh";
@@ -99,7 +99,7 @@ public class NativeBehaviourTests
         Assert.True(rest["count"]!.GetValue<int>() == 1 && !rest["more"]!.GetValue<bool>());
         Assert.NotEqual(S(peek["messages"]![0]!["id"]), S(rest["messages"]![0]!["id"]));
         Assert.Equal(0, box.Call("list_new_messages")["count"]!.GetValue<int>());
-        var state = JsonNode.Parse(File.ReadAllText(Path.Combine(box.State, "history.json")))!;
+        var state = JsonNode.Parse(File.ReadAllText(Path.Join(box.State, "history.json")))!;
         Assert.Equal(S(rest["historyId"]), S(state["test@example.com"]!["labels"]!["INBOX"]!["historyId"]));
     }
 
@@ -107,14 +107,14 @@ public class NativeBehaviourTests
     public async Task Expired_history_keeps_a_safe_bound()
     {
         await using var box = new Mailbox();
-        File.WriteAllText(Path.Combine(box.State, "history.json"),
+        File.WriteAllText(Path.Join(box.State, "history.json"),
             """{"test@example.com":{"labels":{"INBOX":{"historyId":"1","checked_at":1,"positions":{"1":1}}}}}""");
         box.Fake.HistoryFloor = 100;
         box.Fake.Received("m1");
         box.Fake.Received("m2");
         var result = box.Call("list_new_messages", A(("pageSize", 1)));
         Assert.True(S(result["mode"]) == "catch_up" && result["more"]!.GetValue<bool>());
-        JsonNode Saved() => JsonNode.Parse(File.ReadAllText(Path.Combine(box.State, "history.json")))!["test@example.com"]!["labels"]!["INBOX"]!;
+        JsonNode Saved() => JsonNode.Parse(File.ReadAllText(Path.Join(box.State, "history.json")))!["test@example.com"]!["labels"]!["INBOX"]!;
         Assert.Equal(1, Saved()["checked_at"]!.GetValue<int>());
         var rest = box.Call("list_new_messages", A(("pageSize", 1)));
         Assert.True(S(rest["mode"]) == "catch_up" && !rest["more"]!.GetValue<bool>());
@@ -127,7 +127,7 @@ public class NativeBehaviourTests
     {
         await using var box = new Mailbox();
         box.Fake.Received("m1", subject: "Question");
-        string attachment = Path.Combine(box.Home, "rapport.txt");
+        string attachment = Path.Join(box.Home, "rapport.txt");
         File.WriteAllText(attachment, "contenu original");
         var created = box.Call("create_draft", A(("body", "Réponse"), ("replyToMessageId", "m1"), ("attachments", new JsonArray(attachment))));
         Assert.Equal("success", S(created["status"]));
@@ -246,7 +246,7 @@ public class NativeBehaviourTests
     public async Task Secret_attachments_and_header_injection_are_refused()
     {
         await using var box = new Mailbox();
-        string secret = Path.Combine(box.Home, ".ssh", "innocent.txt");
+        string secret = Path.Join(box.Home, ".ssh", "innocent.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(secret)!);
         File.WriteAllText(secret, "test fixture");
         Assert.Equal("error", S(box.Call("create_draft", A(("body", "Body"), ("to", "a@example.com"), ("attachments", new JsonArray(secret))))["status"]));
@@ -265,7 +265,7 @@ public class NativeBehaviourTests
         Assert.NotNull(draft["warning"]);
         Assert.Contains("⟦mail:", S(draft["draft"]!["body"]));
         var reference = draft["draft"]!["attachments"]![0]!["part_id"]!.DeepClone();
-        string output = Path.Combine(box.Home, "downloads");
+        string output = Path.Join(box.Home, "downloads");
         var result = box.Call("download_attachment", A(("messageId", "m-d1"), ("partId", reference), ("directory", output)));
         Assert.Equal("success", S(result["status"]));
         string saved = S(result["path"]);
@@ -275,11 +275,11 @@ public class NativeBehaviourTests
         Assert.NotEqual(saved, S(again["path"]));
         Assert.Equal("%PDF-1.7 faux", File.ReadAllText(saved));
         Assert.Contains("ZoneId=3", File.ReadAllText(saved + ":Zone.Identifier"));
-        var status = JsonNode.Parse(File.ReadAllText(Path.Combine(box.Home, ".nexus", "status", "agymail.json")))!;
+        var status = JsonNode.Parse(File.ReadAllText(Path.Join(box.Home, ".nexus", "status", "agymail.json")))!;
         Assert.Equal("native", S(status["runtime"]));
         Assert.Equal(box.Server.Pid, status["pid"]!.GetValue<int>());
         Assert.Equal(Program.Version, S(status["version"]));
-        string journal = Directory.GetFiles(Path.Combine(box.Home, "journal", "agymail", "antigravity"), "*.jsonl").Single();
+        string journal = Directory.GetFiles(Path.Join(box.Home, "journal", "agymail", "antigravity"), "*.jsonl").Single();
         string text = File.ReadAllText(journal);
         var actions = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => S(JsonNode.Parse(l)!["action"])).ToHashSet();
         Assert.Superset(new HashSet<string> { "auth_status", "get_draft", "download_attachment" }, actions);
@@ -291,7 +291,7 @@ public class NativeBehaviourTests
     public async Task Large_mime_uses_the_resumable_upload_and_keeps_the_bytes()
     {
         await using var box = new Mailbox();
-        string attachment = Path.Combine(box.Home, "large.bin");
+        string attachment = Path.Join(box.Home, "large.bin");
         File.WriteAllBytes(attachment, Enumerable.Repeat((byte)'x', 5 * 1024 * 1024).ToArray());
         var draft = box.Call("create_draft", A(("body", "Large"), ("to", new JsonArray("a@example.com")), ("attachments", new JsonArray(attachment))));
         Assert.Equal("success", S(draft["status"]));
@@ -338,16 +338,16 @@ public class NativeBehaviourTests
     public async Task A_junction_cannot_hide_a_secret_directory()
     {
         await using var box = new Mailbox();
-        string secret = Path.Combine(box.Home, ".ssh");
+        string secret = Path.Join(box.Home, ".ssh");
         Directory.CreateDirectory(secret);
-        File.WriteAllText(Path.Combine(secret, "ordinary.txt"), "local test fixture");
-        string alias = Path.Combine(box.Home, "alias");
+        File.WriteAllText(Path.Join(secret, "ordinary.txt"), "local test fixture");
+        string alias = Path.Join(box.Home, "alias");
         using (var mklink = Process.Start(new ProcessStartInfo("cmd.exe", ["/d", "/c", "mklink", "/J", alias, secret]) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true })!)
         {
             mklink.WaitForExit();
             Assert.SkipWhen(mklink.ExitCode != 0, "Junction creation unavailable");
         }
-        var refused = box.Call("create_draft", A(("body", "body"), ("to", "a@example.com"), ("attachments", new JsonArray(Path.Combine(alias, "ordinary.txt")))));
+        var refused = box.Call("create_draft", A(("body", "body"), ("to", "a@example.com"), ("attachments", new JsonArray(Path.Join(alias, "ordinary.txt")))));
         Assert.Equal("error", S(refused["status"]));
         Assert.Empty(box.Fake.Drafts);
     }
@@ -356,7 +356,7 @@ public class NativeBehaviourTests
     public async Task An_old_scope_token_blocks_mutations_before_the_api()
     {
         await using var box = new Mailbox();
-        File.WriteAllText(Path.Combine(box.State, "token.json"), Support.TestToken(FakeGmail.NewScopes[..2]).ToJsonString());
+        File.WriteAllText(Path.Join(box.State, "token.json"), Support.TestToken(FakeGmail.NewScopes[..2]).ToJsonString());
         var status = box.Call("auth_status");
         Assert.Equal("authenticated", S(status["status"]));
         Assert.True(status["reauth_required"]!.GetValue<bool>());

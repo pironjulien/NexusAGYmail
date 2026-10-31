@@ -21,7 +21,7 @@ public static class Support
             string? chosen = Environment.GetEnvironmentVariable("NEXUS_AGYMAIL_TEST_EXE");
             if (!string.IsNullOrEmpty(chosen))
                 return chosen;
-            string local = Path.Combine(AppContext.BaseDirectory, "NexusAGYmail.exe");
+            string local = Path.Join(AppContext.BaseDirectory, "NexusAGYmail.exe");
             Assert.True(File.Exists(local), $"NexusAGYmail.exe missing next to the tests: {local}");
             return local;
         }
@@ -29,7 +29,7 @@ public static class Support
 
     public static string NewTemp(string name)
     {
-        string path = Path.Combine(Path.GetTempPath(), "nexusagymail-tests", $"{name}-{Guid.NewGuid():N}");
+        string path = Path.Join(Path.GetTempPath(), "nexusagymail-tests", $"{name}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
     }
@@ -37,7 +37,7 @@ public static class Support
     public static void Delete(string path)
     {
         try { Directory.Delete(path, true); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* temporary folder: left for the OS */ }
     }
 
     /// <summary>Environment of an isolated engine: temporary home, state, journal; no account or agent inherited.</summary>
@@ -45,8 +45,8 @@ public static class Support
     {
         ["USERPROFILE"] = home,
         ["HOME"] = home,
-        ["NEXUS_AGYMAIL_HOME"] = Path.Combine(home, ".nexus", "nexus-agymail"),
-        ["NEXUS_JOURNAL_HOME"] = Path.Combine(home, "journal"),
+        ["NEXUS_AGYMAIL_HOME"] = Path.Join(home, ".nexus", "nexus-agymail"),
+        ["NEXUS_JOURNAL_HOME"] = Path.Join(home, "journal"),
         ["NEXUS_AGYMAIL_ACCOUNT"] = null,
         ["NEXUS_AGYMAIL_CLIENT_SECRET"] = null,
         ["NEXUS_AGYMAIL_PROTECTED"] = null,
@@ -180,7 +180,7 @@ public sealed class NativeServer : IDisposable
             if (!process.WaitForExit(3000))
                 process.Kill(true);
         }
-        catch (InvalidOperationException) { }
+        catch (InvalidOperationException) { /* process already gone */ }
         process.Dispose();
     }
 }

@@ -74,7 +74,7 @@ internal sealed class MailOperations
                 var auth = GmailAuth.GetCredentials(); result["status"] = "authenticated";
                 result["valid"] = auth.Valid; result["expiry"] = auth.ExpiryIso;
             }
-            catch (Exception error) { foreach (var pair in Failure(error)) result[pair.Key] = pair.Value?.DeepClone(); }
+            catch (Exception error) { foreach (var pair in Failure(error)) result[pair.Key] = pair.Value?.DeepClone(); }  // status boundary: any failure is reported, never thrown
         }
         result["reauth_required"] = result["scopes"]?["reauth_required"]?.GetValue<bool>() == true || S(result["code"]) is "revoked" or "unreadable";
         return result;
@@ -91,9 +91,9 @@ internal sealed class MailOperations
     }
     private void Remember(JsonObject value, string source)
     {
-        foreach (string field in new[] { "from", "to", "cc", "bcc", "replyTo" })
-            if (InternetAddressList.TryParse(S(value[field]), out var addresses))
-                foreach (var address in addresses.Mailboxes) origins[address.Address] = source;
+        var lists = new[] { "from", "to", "cc", "bcc", "replyTo" }
+            .Select(field => InternetAddressList.TryParse(S(value[field]), out var addresses) ? addresses : null).OfType<InternetAddressList>();
+        foreach (var address in lists.SelectMany(addresses => addresses.Mailboxes)) origins[address.Address] = source;
     }
     private JsonObject Search(JsonObject args)
     {
@@ -308,14 +308,9 @@ internal sealed class MailOperations
     private JsonObject WriteDraft(JsonObject args, bool update)
     {
         string draftId = Arg(args, "draftId"), threadId = Arg(args, "threadId");
-        MimeMessage message;
-        if (update)
-        {
-            var draft = Get("drafts/" + Id(draftId), ("format", "raw"));
-            message = ParseRaw(draft["message"]!.AsObject()).Mime;
-            threadId = S(draft["message"]?["threadId"]);
-        }
-        else message = new MimeMessage();
+        JsonObject? draft = update ? Get("drafts/" + Id(draftId), ("format", "raw")) : null;
+        using MimeMessage message = draft is null ? new MimeMessage() : ParseRaw(draft["message"]!.AsObject()).Mime;
+        if (draft is not null) threadId = S(draft["message"]?["threadId"]);
         if (!update)
         {
             string replyId = Arg(args, "replyToMessageId"); JsonObject? original = null;
@@ -327,7 +322,12 @@ internal sealed class MailOperations
                 if (Strings(args["to"]).Count == 0) SetRecipients(message.To, Header(original, "Reply-To") is { Length: > 0 } reply ? reply : Header(original, "From"));
                 string subject = Header(original, "Subject"); message.Subject = Regex.IsMatch(subject, "^Re:", RegexOptions.IgnoreCase) ? subject : "Re: " + subject;
                 string messageId = Header(original, "Message-ID").Trim('<', '>');
-                if (messageId.Length > 0) { message.InReplyTo = messageId; foreach (var reference in MimeKit.Utils.MimeUtils.EnumerateReferences(Header(original, "References"))) message.References.Add(reference); if (!message.References.Contains(messageId)) message.References.Add(messageId); }
+                if (messageId.Length > 0)
+                {
+                    message.InReplyTo = messageId;
+                    foreach (var reference in MimeKit.Utils.MimeUtils.EnumerateReferences(Header(original, "References"))) message.References.Add(reference);
+                    if (!message.References.Contains(messageId)) message.References.Add(messageId);
+                }
             }
         }
         foreach (var (key, target) in new[] { ("to", message.To), ("cc", message.Cc), ("bcc", message.Bcc) })
@@ -341,7 +341,7 @@ internal sealed class MailOperations
         var builder = new BodyBuilder { TextBody = Arg(args, "body") };
         long total = 0;
         var removed = Strings(args["removeAttachments"]).ToHashSet(StringComparer.Ordinal);
-        if (update) foreach (var part in Attachments(message)) if (!removed.Contains(FileName(part))) { total += Content(part).Length; builder.Attachments.Add(part); }
+        if (update) foreach (var part in Attachments(message).Where(part => !removed.Contains(FileName(part)))) { total += Content(part).Length; builder.Attachments.Add(part); }
         foreach (var path in Strings(args["attachments"]).Distinct())
         {
             var attachment = AttachmentSecurity.ValidateAttachmentForSend(path); total += attachment.Content.Length;
@@ -422,13 +422,18 @@ internal sealed class MailOperations
         lines.Add($"Subject: {S(summary["subject"])}");
         foreach (var item in summary["attachments"]?.AsArray().OfType<JsonObject>() ?? [])
             lines.Add($"Attachment: {S(item["name"])} ({item["size"]} bytes)");
-        foreach (var recipient in mime.To.Mailboxes.Concat(mime.Cc.Mailboxes).Concat(mime.Bcc.Mailboxes))
-            if (origins.TryGetValue(recipient.Address, out string? source))
-                lines.Add($"⚠ {MailPolicy.Clean(recipient.Address)} appears in an email that was read ({MailPolicy.Clean(source)}).");
+        foreach (var (address, source) in ReadOrigins(mime))
+            lines.Add($"⚠ {MailPolicy.Clean(address)} appears in an email that was read ({MailPolicy.Clean(source)}).");
         bool cut = summary["truncated"]?.GetValue<bool>() == true;
         lines.AddRange(["", S(summary["body"]) + (cut ? $"\n[… {summary["body_chars"]} characters in all]" : "")]);
         return (string.Join("\n", lines), DraftAccord.IssueAccord(sha, context));
     }
+
+    /// <summary>Recipients of the draft that appeared in an email read by this session, with that email.</summary>
+    private IEnumerable<(string Address, string Source)> ReadOrigins(MimeMessage mime) =>
+        mime.To.Mailboxes.Concat(mime.Cc.Mailboxes).Concat(mime.Bcc.Mailboxes)
+            .Select(recipient => (recipient.Address, Source: origins.GetValueOrDefault(recipient.Address)))
+            .Where(pair => pair.Source is not null).Select(pair => (pair.Address, pair.Source!));
 
     private JsonObject Send(JsonObject args)
     {
@@ -450,12 +455,12 @@ internal sealed class MailOperations
                 if (mime.MessageId is { Length: > 0 } messageId)
                 {
                     try { previous["found_in_sent"] = (Get("messages", ("q", "in:sent rfc822msgid:" + messageId), ("maxResults", "1"))["messages"]?.AsArray().Count ?? 0) > 0; }
-                    catch (Exception) { previous["lookup"] = "unavailable"; }
+                    catch (Exception) { previous["lookup"] = "unavailable"; }  // best effort: the preview never fails on this lookup
                 }
             }
             var provenance = new JsonArray();
-            foreach (var recipient in mime.To.Mailboxes.Concat(mime.Cc.Mailboxes).Concat(mime.Bcc.Mailboxes))
-                if (origins.TryGetValue(recipient.Address, out string? source)) provenance.Add(new JsonObject { ["recipient"] = recipient.Address, ["source"] = source, ["note"] = "Recipient appeared in an email read by this session. Only the user can authorize sending to it." });
+            foreach (var (address, source) in ReadOrigins(mime))
+                provenance.Add(new JsonObject { ["recipient"] = address, ["source"] = source, ["note"] = "Recipient appeared in an email read by this session. Only the user can authorize sending to it." });
             if (provenance.Count > 0) preview["provenance"] = provenance;
             return MailFraming.Frame(preview);
         }
@@ -468,7 +473,7 @@ internal sealed class MailOperations
             else { body["raw"] = MimeHelper.Base64UrlEncode(raw); sent = Post("messages/send", body); }
             if (S(sent["id"]).Length == 0) throw new IOException("Gmail send returned no message ID; outcome is unknown");
             var result = new JsonObject { ["status"] = "success", ["sent"] = true, ["message"] = sent, ["draft"] = "kept", ["note"] = "The exact approved bytes were sent. The draft is kept; a concurrent edit is never deleted." };
-            try { sends.Resolve(sha, attempt); } catch (Exception) { result["state_warning"] = "Send succeeded but its local attempt record could not be cleared. Do not resend."; }
+            try { sends.Resolve(sha, attempt); } catch (Exception) { result["state_warning"] = "Send succeeded but its local attempt record could not be cleared. Do not resend."; }  // a sent email is never reported as failed
             return result;
         }
         catch (GmailApiException error) when ((int)error.StatusCode is >= 400 and < 500)
@@ -485,7 +490,8 @@ internal sealed class MailOperations
     {
         var ids = Strings(node).Select(s => s.Trim()).Distinct().ToList();
         if (ids.Count is < 1 or > 100) throw new ArgumentException("Provide between 1 and 100 IDs");
-        foreach (var id in ids) _ = Id(id); return ids;
+        foreach (var id in ids) _ = Id(id);
+        return ids;
     }
     private static void ModifyScope()
     {
@@ -511,7 +517,7 @@ internal sealed class MailOperations
         foreach (string id in ids)
         {
             try { Post((thread ? "threads/" : "messages/") + Id(id) + "/modify", new() { [add ? "addLabelIds" : "removeLabelIds"] = new JsonArray(labels.Select(l => (JsonNode)JsonValue.Create(l)!).ToArray()) }); successes.Add(id); }
-            catch (Exception exception) { var result = Failure(exception); result["completed"] = new JsonArray(successes.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()); return result; }
+            catch (Exception exception) { var result = Failure(exception); result["completed"] = new JsonArray(successes.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()); return result; }  // batch boundary: report what was done
         }
         return new() { ["status"] = "success", ["modified"] = successes.Count };
     }
@@ -522,7 +528,7 @@ internal sealed class MailOperations
         foreach (string id in ids)
         {
             try { Post((thread ? "threads/" : "messages/") + Id(id) + (name.StartsWith("untrash", StringComparison.Ordinal) ? "/untrash" : "/trash")); done.Add(id); }
-            catch (Exception exception) { var result = Failure(exception); result["completed"] = new JsonArray(done.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()); return result; }
+            catch (Exception exception) { var result = Failure(exception); result["completed"] = new JsonArray(done.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()); return result; }  // batch boundary: report what was done
         }
         return new() { ["status"] = "success", ["count"] = done.Count, ["note"] = "Trash is reversible for 30 days. No permanent deletion is performed." };
     }

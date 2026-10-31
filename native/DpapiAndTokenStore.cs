@@ -210,7 +210,7 @@ public static class Dpapi
                 if (TryUnprotectCore(decoded, entropy, useDefaultEntropy, out plain, out _))
                     return plain!;
             }
-            catch
+            catch (FormatException)
             {
                 // Fall through to raw attempt
             }
@@ -354,7 +354,7 @@ public static class Dpapi
             using var proc = Process.Start(psi);
             proc?.WaitForExit(5000);
         }
-        catch (Exception ex)
+        catch (Exception ex)  // boundary: any icacls failure becomes a DpapiError for the callers
         {
             throw new DpapiError(Marshal.GetLastWin32Error(), $"permissions not applied to {path}: {ex.Message}");
         }
@@ -393,9 +393,9 @@ public sealed class TokenStore
     public TokenStore(string directory, double lockTimeout = DefaultLockTimeoutSeconds)
     {
         DirectoryPath = Path.GetFullPath(directory);
-        TokenPath = Path.Combine(DirectoryPath, "token.bin");
-        LegacyPath = Path.Combine(DirectoryPath, "token.json");
-        LockPath = Path.Combine(DirectoryPath, "token.lock");
+        TokenPath = Path.Join(DirectoryPath, "token.bin");
+        LegacyPath = Path.Join(DirectoryPath, "token.json");
+        LockPath = Path.Join(DirectoryPath, "token.lock");
         LockTimeoutSeconds = lockTimeout;
     }
 
@@ -415,7 +415,7 @@ public sealed class TokenStore
         {
             if (created)
             {
-                try { Dpapi.RestrictToCurrentUser(LockPath); } catch { }
+                try { Dpapi.RestrictToCurrentUser(LockPath); } catch (DpapiError) { /* best effort: the lock file holds no secret */ }
             }
 
             var sw = Stopwatch.StartNew();
@@ -463,7 +463,7 @@ public sealed class TokenStore
 
             if (stream is not null)
             {
-                try { stream.Unlock(0, 1); } catch { }
+                try { stream.Unlock(0, 1); } catch (IOException) { /* already unlocked: Dispose releases it anyway */ }
                 stream.Dispose();
             }
         }
@@ -518,7 +518,7 @@ public sealed class TokenStore
         string json = info.ToJsonString(CompactJsonOptions);
         byte[] blob = Dpapi.Protect(Encoding.UTF8.GetBytes(json));
         string rand = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
-        string tmp = Path.Combine(DirectoryPath, $"token.bin.{Environment.ProcessId}.{rand}.tmp");
+        string tmp = Path.Join(DirectoryPath, $"token.bin.{Environment.ProcessId}.{rand}.tmp");
         try
         {
             using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -536,7 +536,7 @@ public sealed class TokenStore
                 if (File.Exists(tmp))
                     File.Delete(tmp);
             }
-            catch
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // Ignore cleanup failure
             }
@@ -648,7 +648,7 @@ public static class GmailAuth
         string? over = Environment.GetEnvironmentVariable(StateEnv);
         string path = !string.IsNullOrWhiteSpace(over)
             ? Path.GetFullPath(over)
-            : Path.Combine(HomeDir(), ".nexus", "nexus-agymail");
+            : Path.Join(HomeDir(), ".nexus", "nexus-agymail");
         Directory.CreateDirectory(path);
         return path;
     }
@@ -667,11 +667,7 @@ public static class GmailAuth
         }
         else if (node is JsonArray arr)
         {
-            foreach (var item in arr)
-            {
-                if (item?.GetValue<string>() is { Length: > 0 } s)
-                    list.Add(s);
-            }
+            list.AddRange(arr.Select(item => item?.GetValue<string>()).OfType<string>().Where(s => s.Length > 0));
         }
         list.Sort(StringComparer.Ordinal);
         return list;
@@ -911,7 +907,7 @@ public static class GmailAuth
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex)  // network boundary: every transport failure becomes one refresh error
         {
             throw new GmailAuthError("network", $"network: the token could not be refreshed ({ex.Message})");
         }
