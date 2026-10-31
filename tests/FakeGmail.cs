@@ -18,7 +18,7 @@ namespace NexusAGYmail.Tests;
 /// <summary>
 /// Fake Gmail API over HTTP on loopback only (no network): messages (list filtered by labelIds and the q terms
 /// after:/before:/rfc822msgid:/in:sent, get, attachments, modify, trash, untrash, send, batchModify), threads, labels,
-/// drafts, profile, history, resumable uploads; paging, metadata/full/raw formats, programmable faults (429, 5xx),
+/// drafts, profile, sendAs aliases, history, resumable uploads; paging, metadata/full/raw formats, programmable faults (429, 5xx),
 /// lost or truncated send replies, a redirecting send, and one-shot hooks run right after a request of a given kind
 /// (a concurrent change). Every request is recorded, so exact bytes, duplicates and unknown outcomes are observable.
 /// </summary>
@@ -54,6 +54,7 @@ public sealed class FakeGmail : IAsyncDisposable
     public int GarbledSends { get; set; }
     public byte[]? SendResponseOverride { get; set; }
     public bool RedirectSend { get; set; }
+    public string FaultReason { get; set; } = "rateLimitExceeded";
 
     public FakeGmail()
     {
@@ -319,6 +320,7 @@ public sealed class FakeGmail : IAsyncDisposable
             ("GET", "threads", 2) => "thread",
             ("GET", "labels", 1) => "labels",
             ("GET", "profile", 1) => "profile",
+            ("GET", "settings", 2) => "send-as",
             ("GET", "history", 1) => "history",
             ("POST", "labels", 1) => "label-create",
             ("POST", "drafts", 1) => "draft",
@@ -372,7 +374,7 @@ public sealed class FakeGmail : IAsyncDisposable
                 ["error"] = new JsonObject
                 {
                     ["code"] = fault, ["message"] = "panne simulée",
-                    ["errors"] = new JsonArray(new JsonObject { ["reason"] = "rateLimitExceeded" }),
+                    ["errors"] = new JsonArray(new JsonObject { ["reason"] = FaultReason }),
                 },
             });
         }
@@ -404,6 +406,10 @@ public sealed class FakeGmail : IAsyncDisposable
             }
             case "thread-list":
                 return (200, Page(Threads.Keys.Order(StringComparer.Ordinal).ToList(), query, "threads", i => new JsonObject { ["id"] = i }));
+            case "send-as":
+                return (200, new JsonObject { ["sendAs"] = new JsonArray(
+                    new JsonObject { ["sendAsEmail"] = "test@example.com", ["isPrimary"] = true },
+                    new JsonObject { ["sendAsEmail"] = "alias@example.com" }) });
             case "profile":
                 return (200, new JsonObject { ["emailAddress"] = "test@example.com", ["historyId"] = HistoryId.ToString(), ["messagesTotal"] = 0 });
             case "history":

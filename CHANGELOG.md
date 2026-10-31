@@ -6,7 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-31
+
+### Added
+- `get_message` and `get_thread` give each message's `authentication`: SPF, DKIM and DMARC as Gmail checked them on
+  arrival, and a verdict (`pass`, `fail`, `none`, `unverified`); a DMARC failure adds `authentication_warning` (the
+  From address may be forged). Only the topmost `Authentication-Results` written by `mx.google.com` counts: one the
+  sender wrote lower down, or another server's, is ignored.
+- `create_draft` takes `replyAll`: the reply also goes to the original To and Cc, never to this account or its
+  aliases (Gmail's send-as list). Sending still needs the user's yes.
+- Every failure says whether a new attempt is safe, with NexusBrowser's convention: `outcome` (`not_done`,
+  `unknown`, `partial`) and `retry_safe` (quota and network failures yes; revoked or forbidden access no; a draft
+  or send Gmail may have received never).
+
 ### Changed
+- `label_message` / `unlabel_message` change up to 1,000 messages in one Gmail `users.messages.batchModify` call
+  instead of one call per message. Threads and trash stay one call per item.
+- A 403 whose reason is a rate limit is reported as `quota` (it was `forbidden`).
 - Release: a push whose version is not released yet becomes the stable release right after its development build
   (same files); "Run workflow" still promotes by hand.
 

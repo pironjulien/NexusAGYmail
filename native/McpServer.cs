@@ -108,7 +108,7 @@ public sealed class McpServer
                 if ((parameters?["arguments"] as JsonObject)?["accord"] is JsonValue accord && accord.TryGetValue(out string? directToken))
                     DraftAccord.RevokeAccord(directToken);
             }
-            value = MailOperations.Failure(exception);
+            value = MailOperations.Failure(exception, name);
         }
         Diagnostics.Journal(clientName, name, value, elapsed.ElapsedMilliseconds);
         var result = new JsonObject

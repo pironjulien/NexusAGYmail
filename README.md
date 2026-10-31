@@ -116,17 +116,17 @@ and its extensions (`update_draft`, `trash_*`), plus four of its own: `send_draf
 | Tool | What it does |
 |---|---|
 | `search_threads` | Search threads (Gmail syntax), one page per call: `pageSize` 1 to 50 (20), `pageToken`; each thread gives `messageCount` and a summary of its last 5 messages; trash with `includeTrash`, spam never |
-| `get_message` | One message: headers, body as text (HTML converted), attachments listed (`part_id`, name, type, size); `maxChars` (8,090 by default) |
-| `get_thread` | A thread in order, quotes of earlier replies removed and reported; `maxChars` shared (16,180 by default) |
+| `get_message` | One message: headers, body as text (HTML converted), attachments listed (`part_id`, name, type, size), `authentication` (SPF, DKIM, DMARC as Gmail checked them: `pass`, `fail` with `authentication_warning`, `none`, `unverified`); `maxChars` (8,090 by default) |
+| `get_thread` | A thread in order, quotes of earlier replies removed and reported, `authentication` per message; `maxChars` shared (16,180 by default) |
 | `list_new_messages` | Messages that arrived since the previous call (Gmail history, `users.history.list`), oldest first, without bodies: the position (`historyId`) is remembered per account and label (`labelId`, `INBOX` by default), the first call only sets it; `pageSize` 1 to 100 (20) with `more`, `advance=false` to peek, `startHistoryId` to resume from a returned position. History expired (about a week): the messages since the last check are found by date instead (`mode: catch_up`). Drafts, spam and trash never |
 | `download_attachment` | Saves an attachment (`partId`) to `Downloads/NexusAGYmail` or an absolute `directory`: sanitized name, never overwrites, marked as downloaded from the Internet; returns path, size, SHA-256 |
 | `list_labels` | Labels (id, name, type), system labels first |
 | `create_label` | Creates a user label (`displayName`, `A/B` = nested), missing parents too unless `autoCreateParentLabels=false`; an existing label is returned as it is, system labels refused |
-| `create_draft` | A draft; `to`, `cc`, `bcc` as a list (or text); as a reply (`replyToMessageId` or `threadId`): In-Reply-To, References, "Re:", same thread; `attachments` (absolute paths, 25 MB in total) |
+| `create_draft` | A draft; `to`, `cc`, `bcc` as a list (or text); as a reply (`replyToMessageId` or `threadId`): In-Reply-To, References, "Re:", same thread; `replyAll` adds the original To and Cc, never this account or its aliases; `attachments` (absolute paths, 25 MB in total) |
 | `list_drafts` | Drafts, one page per call (1 to 100), filtered by `query` |
 | `get_draft` | One draft: recipients, subject, body as text, attachments, reply headers; `maxChars` (8,090 by default) |
 | `update_draft` | Rewrites a draft (empty fields unchanged), thread, reply and attachments kept; `attachments` adds, `removeAttachments` removes (by name) |
-| `label_message` / `unlabel_message`, `label_thread` / `unlabel_thread` | `labelIds`: system IDs (`INBOX`, `UNREAD`, `STARRED`, `IMPORTANT`, `CATEGORY_*`), user label IDs or names; archive = remove `INBOX`; an unknown label is an error, created only with `createMissing=true`; one ID or a list, 100 at most |
+| `label_message` / `unlabel_message`, `label_thread` / `unlabel_thread` | `labelIds`: system IDs (`INBOX`, `UNREAD`, `STARRED`, `IMPORTANT`, `CATEGORY_*`), user label IDs or names; archive = remove `INBOX`; an unknown label is an error, created only with `createMissing=true`; one ID or a list: 1,000 messages in one Gmail `batchModify`, 100 threads |
 | `trash_message` / `trash_thread`, `untrash_message` / `untrash_thread` | Trash, reversible for 30 days; 100 items at most |
 | `send_draft` | When the client supports MCP elicitation: opens the client's confirmation dialog with the draft and sends **only on the user's yes there**. Otherwise: a summary to show to the user plus an `accord` token bound to the exact draft, and sends **only with `confirm=true` and that token**. Either way the draft is read again and must be unchanged |
 | `auth_status` | Token storage, granted scopes (checked at startup), validity; `reauth_required` when a scope is missing or extra |
@@ -179,9 +179,14 @@ filters or signature, another Google account).
   the new one is saved.
 - **Exact errors**: revoked or expired token, network, quota, permissions, not found, label: each has a stable `code`
   (`revoked`, `network`, `quota`, `forbidden`, `not_found`, `label`, `invalid_argument`...). Every request except a send is retried up to 5 times with random exponential
-  backoff on 429, 5xx, a rate-limit 403 or a network failure; a send only on 429.
-- **Bounded sizes**: bodies cut at `maxChars` (reported), paged searches, at most 100 items per labelling or trash
-  call.
+  backoff on 429, 5xx, a rate-limit 403 or a network failure; a send only on 429. Every failure also says whether a
+  new attempt is safe, as NexusBrowser does: `outcome` `not_done` (Gmail refused it or it never left), `unknown` (Gmail
+  may have acted: a draft or a send is never replayed blindly) or `partial` (a list stopped midway, `completed` lists
+  what was done), and `retry_safe` (quota and network: yes; revoked, forbidden: no, only the user can fix it).
+- **Sender check**: `authentication` reads only the topmost `Authentication-Results` and only when Gmail
+  (`mx.google.com`) wrote it; a header the sender wrote lower down, or another server's, is never believed.
+- **Bounded sizes**: bodies cut at `maxChars` (reported), paged searches, at most 1,000 messages per labelling call
+  and 100 items per thread labelling or trash call.
 
 ## Configuration
 

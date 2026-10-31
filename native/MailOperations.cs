@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using MimeKit;
+using MimeKit.Cryptography;
 
 namespace NexusAGYmail;
 
@@ -36,19 +37,33 @@ internal sealed class MailOperations
         .Select(v => Uri.EscapeDataString(v.Key) + "=" + Uri.EscapeDataString(v.Value!)));
     private JsonObject Get(string path, params (string Key, string? Value)[] query) => client.Execute(HttpMethod.Get, path, query: Query(query));
     private JsonObject Post(string path, JsonObject? body = null) => client.Execute(HttpMethod.Post, path, body ?? new());
-    public static JsonObject Failure(Exception error)
+    // Tools that are not safe to replay when Gmail may have acted: a second draft or a second email.
+    private static readonly HashSet<string> NotIdempotent = new(StringComparer.Ordinal) { "create_draft", "send_draft" };
+    // Failures only the user can fix (sign in again, grant access, repair the setup): retrying never helps.
+    private static readonly HashSet<string> UserOnly = new(StringComparer.Ordinal) { "forbidden", "unauthenticated", "revoked", "refused", "no_token", "corrupt", "client", "state", "internal" };
+    private static bool ReadOnly(string tool) => tool is "auth_status" or "download_attachment" || tool.StartsWith("get_", StringComparison.Ordinal) || tool.StartsWith("list_", StringComparison.Ordinal) || tool.StartsWith("search_", StringComparison.Ordinal);
+
+    /// <summary>
+    /// A failed answer, with the NexusBrowser convention for a new attempt: outcome "not_done" (Gmail refused it or it
+    /// never left), "unknown" (Gmail may have acted: check before resending) or "partial" (set by the batch tools), and
+    /// retry_safe: quota and network failures may be retried, a revoked or forbidden access never.
+    /// </summary>
+    public static JsonObject Failure(Exception error, string tool = "")
     {
         string code = error switch
         {
             GmailAuthError auth => auth.Code,
             GmailApiException api when api.StatusCode == HttpStatusCode.NotFound => "not_found",
-            GmailApiException api when (int)api.StatusCode == 429 => "quota",
+            GmailApiException api when (int)api.StatusCode == 429 || api.StatusCode == HttpStatusCode.Forbidden && RetryPolicy.Retryable(api, false) => "quota",
             GmailApiException api when api.StatusCode == HttpStatusCode.Forbidden => "forbidden",
             GmailApiException api when api.StatusCode == HttpStatusCode.Unauthorized => "unauthenticated",
             GmailApiException => "api", ArgumentException or FormatException => "invalid_argument",
             HttpRequestException or TaskCanceledException => "network", IOException => "state", _ => "internal"
         };
-        return new() { ["status"] = "error", ["code"] = code, ["error"] = MailPolicy.Clean(error.Message) };
+        bool ambiguous = error is HttpRequestException or TaskCanceledException || error is GmailApiException { StatusCode: >= HttpStatusCode.InternalServerError };
+        string outcome = ambiguous && !ReadOnly(tool) ? "unknown" : "not_done";
+        return new() { ["status"] = "error", ["code"] = code, ["error"] = MailPolicy.Clean(error.Message), ["outcome"] = outcome,
+            ["retry_safe"] = !UserOnly.Contains(code) && !(outcome == "unknown" && NotIdempotent.Contains(tool)) };
     }
     public JsonObject Call(string name, JsonObject args) => name switch
     {
@@ -155,12 +170,35 @@ internal sealed class MailOperations
             ["inReplyTo"] = mime.InReplyTo ?? "", ["references"] = string.Join(" ", mime.References) };
         return output;
     }
+    /// <summary>
+    /// SPF, DKIM and DMARC as Gmail checked them on arrival. Only the topmost Authentication-Results counts, and only when
+    /// mx.google.com wrote it: the ones below it, or from another server, may have been written by the sender.
+    /// </summary>
+    internal static void Authenticate(JsonObject output, MimeMessage mime, JsonObject meta)
+    {
+        var result = new JsonObject { ["verdict"] = "unverified" }; output["authentication"] = result;
+        var header = mime.Headers.FirstOrDefault(h => h.Id == HeaderId.AuthenticationResults);
+        if (Strings(meta["labelIds"]).Contains("DRAFT") || header is null || !AuthenticationResults.TryParse(header.RawValue, out var parsed)
+            || !string.Equals(parsed.AuthenticationServiceIdentifier, "mx.google.com", StringComparison.OrdinalIgnoreCase)) return;
+        foreach (string method in new[] { "spf", "dkim", "dmarc" })
+        {
+            var found = parsed.Results.Where(r => string.Equals(r.Method, method, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (found.Count == 0) continue;
+            var chosen = found.FirstOrDefault(r => string.Equals(r.Result, "pass", StringComparison.OrdinalIgnoreCase)) ?? found[0];  // several DKIM signatures: one pass is enough
+            result[method] = Regex.IsMatch(chosen.Result ?? "", "^[A-Za-z]+$") ? chosen.Result!.ToLowerInvariant() : "unknown";
+            if (method == "dmarc" && chosen.Properties.FirstOrDefault(p => p.Property == "from")?.Value is { } domain && Regex.IsMatch(domain, @"^[A-Za-z0-9.-]+$"))
+                result["domain"] = domain.ToLowerInvariant();
+        }
+        result["verdict"] = S(result["dmarc"]) switch { "pass" => "pass", "fail" => "fail", _ => "none" };
+        if (S(result["verdict"]) == "fail")
+            output["authentication_warning"] = "Gmail could not authenticate this sender (DMARC fail): the From address may be forged.";
+    }
     private JsonObject ReadMessage(JsonObject args)
     {
         var meta = Get("messages/" + Id(Arg(args, "messageId")), ("format", "raw"));
         var (mime, _) = ParseRaw(meta);
         var message = Full(mime, meta, Math.Clamp(args["maxChars"]?.GetValue<int>() ?? 8090, 200, 100000));
-        Remember(message, S(meta["id"]));
+        Authenticate(message, mime, meta); Remember(message, S(meta["id"]));
         return MailFraming.Frame(new() { ["status"] = "success", ["message"] = message });
     }
     private JsonObject ReadThread(JsonObject args)
@@ -183,7 +221,7 @@ internal sealed class MailOperations
             if (shortOnes.Count == 0) { foreach (int i in remaining) { shares[i] = Math.Min(share + (budget % remaining.Count > remaining.IndexOf(i) ? 1 : 0), Text(messages[i].Mime).Length); } break; }
             foreach (int i in shortOnes) { shares[i] = Text(messages[i].Mime).Length; budget -= shares[i]; remaining.Remove(i); }
         }
-        var rendered = messages.Select((m, i) => Full(m.Mime, m.Meta, shares[i], true)).ToList();
+        var rendered = messages.Select((m, i) => { var full = Full(m.Mime, m.Meta, shares[i], true); Authenticate(full, m.Mime, m.Meta); return full; }).ToList();
         foreach (var message in rendered) Remember(message, S(message["id"]));
         return MailFraming.Frame(new() { ["status"] = "success", ["thread"] = new JsonObject { ["id"] = S(thread["id"]), ["messagesCount"] = rendered.Count, ["messages"] = Array(rendered) } });
     }
@@ -319,7 +357,18 @@ internal sealed class MailOperations
             if (original is not null)
             {
                 threadId = S(original["threadId"]);
-                if (Strings(args["to"]).Count == 0) SetRecipients(message.To, Header(original, "Reply-To") is { Length: > 0 } reply ? reply : Header(original, "From"));
+                string sender = Header(original, "Reply-To") is { Length: > 0 } reply ? reply : Header(original, "From");
+                if (Flag(args, "replyAll"))
+                {
+                    // As Gmail's reply all: the sender and the original To, then its Cc, never this account or its aliases.
+                    var seen = (Get("settings/sendAs")["sendAs"]?.AsArray() ?? new()).Select(a => S(a?["sendAsEmail"])).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    List<MailboxAddress> Others(string text) => InternetAddressList.TryParse(text, out var list) ? list.Mailboxes.Where(m => seen.Add(m.Address)).ToList() : [];
+                    var to = Others(sender).Concat(Others(Header(original, "To"))).ToList(); var cc = Others(Header(original, "Cc"));
+                    if (to.Count == 0) (to, cc) = (cc, []);
+                    if (Strings(args["to"]).Count == 0) SetRecipients(message.To, string.Join(", ", to));
+                    if (Strings(args["cc"]).Count == 0) SetRecipients(message.Cc, string.Join(", ", cc));
+                }
+                else if (Strings(args["to"]).Count == 0) SetRecipients(message.To, sender);
                 string subject = Header(original, "Subject"); message.Subject = Regex.IsMatch(subject, "^Re:", RegexOptions.IgnoreCase) ? subject : "Re: " + subject;
                 string messageId = Header(original, "Message-ID").Trim('<', '>');
                 if (messageId.Length > 0)
@@ -479,17 +528,17 @@ internal sealed class MailOperations
         catch (GmailApiException error) when ((int)error.StatusCode is >= 400 and < 500)
         {
             try { sends.Resolve(sha, attempt); } catch (Exception) { /* Original refusal remains authoritative. */ }
-            var result = Failure(error); result["sent"] = false; return result;
+            var result = Failure(error, "send_draft"); result["sent"] = false; return result;
         }
         catch (Exception error) when (error is GmailApiException or HttpRequestException or TaskCanceledException or IOException or System.Text.Json.JsonException)
         {
-            return new() { ["status"] = "unknown", ["code"] = "send_outcome_unknown", ["sent"] = null, ["message"] = "Gmail may have received the send. It was not retried. Inspect Sent before any new user-authorized attempt." };
+            return new() { ["status"] = "unknown", ["code"] = "send_outcome_unknown", ["sent"] = null, ["outcome"] = "unknown", ["retry_safe"] = false, ["message"] = "Gmail may have received the send. It was not retried. Inspect Sent before any new user-authorized attempt." };
         }
     }
-    private static List<string> ItemIds(JsonNode? node)
+    private static List<string> ItemIds(JsonNode? node, int maximum = 100)
     {
         var ids = Strings(node).Select(s => s.Trim()).Distinct().ToList();
-        if (ids.Count is < 1 or > 100) throw new ArgumentException("Provide between 1 and 100 IDs");
+        if (ids.Count < 1 || ids.Count > maximum) throw new ArgumentException($"Provide between 1 and {maximum} IDs");
         foreach (var id in ids) _ = Id(id);
         return ids;
     }
@@ -500,7 +549,7 @@ internal sealed class MailOperations
     private JsonObject Relabel(string name, JsonObject args)
     {
         ModifyScope(); bool thread = name.EndsWith("thread", StringComparison.Ordinal), add = name.StartsWith("label", StringComparison.Ordinal);
-        var ids = ItemIds(args[thread ? "threadId" : "messageId"]);
+        var ids = ItemIds(args[thread ? "threadId" : "messageId"], thread ? 100 : 1000);
         var names = Strings(args["labelIds"]).Select(s => s.Trim()).Distinct().ToList();
         if (names.Count == 0 || names.Any(string.IsNullOrEmpty)) throw new ArgumentException("At least one label is required");
         var known = Get("labels")["labels"]?.AsArray() ?? new();
@@ -513,13 +562,27 @@ internal sealed class MailOperations
             if (label is null && !create) throw new ArgumentException("Label not found; list_labels or use createMissing=true");
         }
         var labels = names.Select(l => EnsureLabel(l, create)).Distinct().ToArray();
+        JsonArray Labelled() => new(labels.Select(l => (JsonNode)JsonValue.Create(l)!).ToArray());
+        if (!thread)
+        {
+            // Messages: one users.messages.batchModify (up to 1,000 IDs) instead of one modify per message.
+            Post("messages/batchModify", new() { ["ids"] = new JsonArray(ids.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray()), [add ? "addLabelIds" : "removeLabelIds"] = Labelled() });
+            return new() { ["status"] = "success", ["modified"] = ids.Count };
+        }
         var successes = new List<string>();
         foreach (string id in ids)
         {
-            try { Post((thread ? "threads/" : "messages/") + Id(id) + "/modify", new() { [add ? "addLabelIds" : "removeLabelIds"] = new JsonArray(labels.Select(l => (JsonNode)JsonValue.Create(l)!).ToArray()) }); successes.Add(id); }
-            catch (Exception exception) { var result = Failure(exception); result["completed"] = new JsonArray(successes.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()); return result; }  // batch boundary: report what was done
+            try { Post("threads/" + Id(id) + "/modify", new() { [add ? "addLabelIds" : "removeLabelIds"] = Labelled() }); successes.Add(id); }
+            catch (Exception exception) { return Partial(exception, name, successes); }  // batch boundary: report what was done
         }
         return new() { ["status"] = "success", ["modified"] = successes.Count };
+    }
+    // Each item is idempotent: resending the whole list is safe, the completed ones are only done again.
+    private static JsonObject Partial(Exception error, string tool, List<string> done)
+    {
+        var result = Failure(error, tool); result["completed"] = new JsonArray(done.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray());
+        if (done.Count > 0) result["outcome"] = "partial";
+        return result;
     }
     private JsonObject Trash(string name, JsonObject args)
     {
@@ -528,7 +591,7 @@ internal sealed class MailOperations
         foreach (string id in ids)
         {
             try { Post((thread ? "threads/" : "messages/") + Id(id) + (name.StartsWith("untrash", StringComparison.Ordinal) ? "/untrash" : "/trash")); done.Add(id); }
-            catch (Exception exception) { var result = Failure(exception); result["completed"] = new JsonArray(done.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()); return result; }  // batch boundary: report what was done
+            catch (Exception exception) { return Partial(exception, name, done); }  // batch boundary: report what was done
         }
         return new() { ["status"] = "success", ["count"] = done.Count, ["note"] = "Trash is reversible for 30 days. No permanent deletion is performed." };
     }
