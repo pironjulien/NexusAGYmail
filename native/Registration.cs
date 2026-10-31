@@ -114,10 +114,8 @@ public static partial class Registration
     public static IEnumerable<(string Path, byte[] Bytes)> PluginFiles()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        foreach (string resource in assembly.GetManifestResourceNames().Order(StringComparer.Ordinal))
+        foreach (string resource in assembly.GetManifestResourceNames().Order(StringComparer.Ordinal).Where(r => r.StartsWith("plugin/", StringComparison.Ordinal)))
         {
-            if (!resource.StartsWith("plugin/", StringComparison.Ordinal))
-                continue;
             using var stream = assembly.GetManifestResourceStream(resource)!;
             using var copy = new MemoryStream();
             stream.CopyTo(copy);
@@ -145,21 +143,21 @@ public static partial class Registration
     {
         if (!File.Exists(path))
             return;
-        string folder = Path.Combine(GmailAuth.GetNexusDir(), "backups");
+        string folder = Path.Join(GmailAuth.GetNexusDir(), "backups");
         Directory.CreateDirectory(folder);
         string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
-        File.Copy(path, Path.Combine(folder, $"{Path.GetFileName(Path.GetDirectoryName(path))}-{Path.GetFileName(path)}-{stamp}"), overwrite: true);
+        File.Copy(path, Path.Join(folder, $"{Path.GetFileName(Path.GetDirectoryName(path))}-{Path.GetFileName(path)}-{stamp}"), overwrite: true);
     }
 
     /// <summary>State of the Antigravity declaration; null when Antigravity is absent.</summary>
     public static string? Antigravity(string exe)
     {
-        string gemini = Path.Combine(GmailAuth.HomeDir(), ".gemini");
-        if (!Directory.Exists(Path.Combine(gemini, "antigravity")) && !Directory.Exists(Path.Combine(gemini, "config")))
+        string gemini = Path.Join(GmailAuth.HomeDir(), ".gemini");
+        if (!Directory.Exists(Path.Join(gemini, "antigravity")) && !Directory.Exists(Path.Join(gemini, "config")))
             return null;
-        string root = Path.Combine(gemini, "config");
-        string target = Path.Combine(root, "plugins", Name);
-        string mcpFile = Path.Combine(target, "mcp_config.json");
+        string root = Path.Join(gemini, "config");
+        string target = Path.Join(root, "plugins", Name);
+        string mcpFile = Path.Join(target, "mcp_config.json");
         JsonNode? current = File.Exists(mcpFile) ? ReadObject(mcpFile)["mcpServers"]?[Name] : null;
         if (File.Exists(mcpFile) && !Ours(current))
             return "kept (a nexus-agymail plugin of yours already exists)";
@@ -167,7 +165,7 @@ public static partial class Registration
         bool changed = false;
         foreach (var (relative, bytes) in PluginFiles())
         {
-            string destination = Path.Combine(target, relative.Replace('/', Path.DirectorySeparatorChar));
+            string destination = Path.Join(target, relative.Replace('/', Path.DirectorySeparatorChar));
             if (File.Exists(destination) && File.ReadAllBytes(destination).AsSpan().SequenceEqual(bytes))
                 continue;
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -182,11 +180,11 @@ public static partial class Registration
             changed = true;
         }
 
-        string globalMcp = Path.Combine(root, "mcp_config.json");  // old global entry of ours: duplicate tools
+        string globalMcp = Path.Join(root, "mcp_config.json");  // old global entry of ours: duplicate tools
         if (File.Exists(globalMcp))
         {
             var data = ReadObject(globalMcp);
-            if (data["mcpServers"] is JsonObject servers && servers.ContainsKey(Name) && Ours(servers[Name]))
+            if (data["mcpServers"] is JsonObject servers && servers.TryGetPropertyValue(Name, out var ours) && Ours(ours))
             {
                 Backup(globalMcp);
                 servers.Remove(Name);
@@ -195,8 +193,8 @@ public static partial class Registration
         }
 
         bool disabled = false;  // a discovered plugin is on by default; an explicit choice of the user is only reported
-        try { disabled = ReadObject(Path.Combine(root, "config.json"))["plugins"]?[Name]?["enabled"] is JsonValue e && e.TryGetValue(out bool on) && !on; }
-        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { }
+        try { disabled = ReadObject(Path.Join(root, "config.json"))["plugins"]?[Name]?["enabled"] is JsonValue e && e.TryGetValue(out bool on) && !on; }
+        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException) { /* unreadable settings: nothing to report */ }
         string state = changed ? "plugin" : "plugin (already installed)";
         return state + (disabled ? ", turned off in Antigravity's settings" : "");
     }

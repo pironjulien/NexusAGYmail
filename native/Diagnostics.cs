@@ -9,8 +9,8 @@ internal static class Diagnostics
     {
         try
         {
-            string directory = Path.Combine(GmailAuth.HomeDir(), ".nexus", "status");
-            Directory.CreateDirectory(directory); string path = Path.Combine(directory, "agymail.json");
+            string directory = Path.Join(GmailAuth.HomeDir(), ".nexus", "status");
+            Directory.CreateDirectory(directory); string path = Path.Join(directory, "agymail.json");
             string temporary = path + "." + Environment.ProcessId + ".tmp";
             var value = new JsonObject { ["product"] = "agymail", ["version"] = Program.Version, ["latest"] = null,
                 ["state"] = "idle", ["runtime"] = "native", ["pid"] = Environment.ProcessId,
@@ -28,7 +28,7 @@ internal static class Diagnostics
             string name = (client ?? Environment.GetEnvironmentVariable("NEXUS_AGENT") ?? "").ToLowerInvariant();
             string? agent = name.Contains("codex") ? "codex" : name.Contains("claude") ? "claude" : name.Contains("antigravity") || name.Contains("gemini") || name.Contains("jetski") ? "antigravity" : null;
             if (agent is null) return;
-            string root = Environment.GetEnvironmentVariable("NEXUS_JOURNAL_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nexus", "journal");
+            string root = Environment.GetEnvironmentVariable("NEXUS_JOURNAL_HOME") ?? Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nexus", "journal");
             string status = result["status"]?.GetValue<string>() ?? "error";
             bool success = status is "success" or "authenticated";
             var now = DateTimeOffset.UtcNow;
@@ -36,8 +36,8 @@ internal static class Diagnostics
                 ["appel"] = null, ["app"] = "gmail", ["cadre"] = null, ["action"] = tool, ["technique"] = "api",
                 ["issue"] = success ? "✓" : status == "confirmation_required" ? "refus" : "✗", ["ms"] = milliseconds,
                 ["premier_plan"] = false, ["erreur"] = success ? null : result["code"]?.DeepClone() ?? JsonValue.Create("error") };
-            string directory = Path.Combine(root, "agymail", agent); Directory.CreateDirectory(directory);
-            File.AppendAllText(Path.Combine(directory, now.ToString("yyyy-MM") + ".jsonl"), line.ToJsonString() + "\n", new UTF8Encoding(false));
+            string directory = Path.Join(root, "agymail", agent); Directory.CreateDirectory(directory);
+            File.AppendAllText(Path.Join(directory, now.ToString("yyyy-MM") + ".jsonl"), line.ToJsonString() + "\n", new UTF8Encoding(false));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* Journal is metadata-only and non-blocking. */ }
     }

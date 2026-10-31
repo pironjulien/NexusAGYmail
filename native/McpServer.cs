@@ -37,7 +37,7 @@ public sealed class McpServer
             JsonObject? response;
             try { response = HandleRequest(JsonNode.Parse(line) as JsonObject ?? throw new JsonException()); }
             catch (JsonException) { response = Error(null, -32700, "Invalid JSON request"); }
-            catch (Exception) { response = Error(null, -32603, "Internal error"); }
+            catch (Exception) { response = Error(null, -32603, "Internal error"); }  // request boundary: the server keeps serving
             if (response is not null) output.WriteLine(response.ToJsonString());
         }
     }
@@ -96,7 +96,7 @@ public sealed class McpServer
             }
             else value = operations.Call(name, args);
         }
-        catch (Exception exception)
+        catch (Exception exception)  // tool boundary: every failure is returned to the client as a result
         {
             if (name == "send_draft")
             {
@@ -236,7 +236,7 @@ public sealed class McpServer
         {
             foreach (var option in options.OfType<JsonObject>())
             {
-                try { Validate(value, option, path); return; } catch (ArgumentException) { }
+                try { Validate(value, option, path); return; } catch (ArgumentException) { /* try the next option */ }
             }
             throw new ArgumentException(path + " has an invalid type");
         }
@@ -254,8 +254,8 @@ public sealed class McpServer
             foreach (var field in schema["required"]?.AsArray() ?? new JsonArray())
                 if (!obj.ContainsKey(field!.GetValue<string>())) throw new ArgumentException(path + "." + field + " is required");
             if (schema["properties"] is JsonObject properties)
-                foreach (var pair in obj)
-                    if (properties[pair.Key] is JsonObject child) Validate(pair.Value, child, path + "." + pair.Key);
+                foreach (var pair in obj.Where(pair => properties[pair.Key] is JsonObject))
+                    Validate(pair.Value, (JsonObject)properties[pair.Key]!, path + "." + pair.Key);
         }
         if (value is JsonArray array && schema["items"] is JsonObject item)
             foreach (var child in array) Validate(child, item, path + "[]");

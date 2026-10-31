@@ -25,9 +25,10 @@ public class PropertyTests
         ];
         foreach (string s in seeds)
             yield return s;
+        var text = new StringBuilder();
         for (int i = 0; i < count; i++)
         {
-            var text = new StringBuilder(seeds[random.Next(seeds.Length)]);
+            text.Clear().Append(seeds[random.Next(seeds.Length)]);
             int edits = random.Next(1, 12);
             for (int e = 0; e < edits; e++)
             {
@@ -47,14 +48,15 @@ public class PropertyTests
         foreach (string input in Inputs(20261030, 4000))
         {
             // The parser create_draft and update_draft use for to, cc and bcc.
-            var message = new MimeMessage { Subject = "s", Body = new TextPart("plain") { Text = "b" } };
+            using var message = new MimeMessage { Subject = "s", Body = new TextPart("plain") { Text = "b" } };
             try { MailOperations.SetRecipients(message.To, input, required: true); }
             catch (Exception ex) when (ex is ArgumentException or ParseException) { continue; }
             accepted++;
             Assert.All(message.To.Mailboxes, m => Assert.False(m.Address.IndexOfAny(['\r', '\n', '\0', '\u0085', '\u2028', '\u2029']) >= 0, $"line break in {m.Address} (from {input})"));
             using var stream = new MemoryStream();
             message.WriteTo(stream, TestContext.Current.CancellationToken);
-            var reread = MimeMessage.Load(new MemoryStream(stream.ToArray()), TestContext.Current.CancellationToken);
+            using var copy = new MemoryStream(stream.ToArray());
+            using var reread = MimeMessage.Load(copy, TestContext.Current.CancellationToken);
             Assert.Equal(message.Headers.Select(h => h.Field), reread.Headers.Select(h => h.Field));
             Assert.Empty(reread.Bcc);
             Assert.Equal(message.To.Mailboxes.Select(m => m.Address), reread.To.Mailboxes.Select(m => m.Address));

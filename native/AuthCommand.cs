@@ -79,7 +79,7 @@ public sealed class GuideIo
     public Action<string> Open { get; init; } = OAuthSignIn.OpenDefaultBrowser;
     public Action<TimeSpan> Sleep { get; init; } = Thread.Sleep;
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
-    public string Downloads { get; init; } = Path.Combine(GmailAuth.HomeDir(), "Downloads");
+    public string Downloads { get; init; } = Path.Join(GmailAuth.HomeDir(), "Downloads");
     /// <summary>State folder (client and token); null = the default one.</summary>
     public string? StateDir { get; init; }
     /// <summary>Signs in and returns the result (the real browser flow by default).</summary>
