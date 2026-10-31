@@ -3,7 +3,7 @@
   "name": "io.github.pironjulien/nexus-agymail",
   "title": "NexusAGYmail",
   "description": "Gmail for Google Antigravity via the official API; sends only after the user's yes.",
-  "version": "0.15.2",
+  "version": "0.15.3",
   "websiteUrl": "https://julienpiron.fr/nexusagymail/",
   "icons": [
     {
@@ -28,7 +28,7 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/pironjulien/NexusAGYmail/releases/download/v0.15.2/nexus-agymail-0.15.2-win-x64.mcpb",
+      "identifier": "https://github.com/pironjulien/NexusAGYmail/releases/download/v0.15.3/nexus-agymail-0.15.3-win-x64.mcpb",
       "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "transport": {
         "type": "stdio"
@@ -56,7 +56,7 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/pironjulien/NexusAGYmail/releases/download/v0.15.2/nexus-agymail-0.15.2-win-arm64.mcpb",
+      "identifier": "https://github.com/pironjulien/NexusAGYmail/releases/download/v0.15.3/nexus-agymail-0.15.3-win-arm64.mcpb",
       "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "transport": {
         "type": "stdio"

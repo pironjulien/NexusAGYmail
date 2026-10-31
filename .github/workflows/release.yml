@@ -1,30 +1,46 @@
-# Release: on a vX.Y.Z tag (same version as native/Program.cs, server.json and CHANGELOG.md), runs test.ps1, builds
-# NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundles
-# nexus-agymail-X.Y.Z-win-x64.mcpb and nexus-agymail-X.Y.Z-win-arm64.mcpb, and get.ps1 (tools/package.ps1), attests their build provenance (Sigstore, keyless:
-# `gh attestation verify <file> --repo pironjulien/NexusAGYmail`), and publishes them with SHA256SUMS.txt and that
-# provenance (NexusAGYmail-X.Y.Z.intoto.jsonl, for `gh attestation verify <file> --bundle`) as the
-# "NexusAGYmail X.Y.Z" GitHub release. Then server.json, with the bundles' URLs and SHA-256, goes to the official MCP
-# registry (GitHub OIDC login, namespace io.github.pironjulien; no token stored).
-# Actions pinned by commit SHA; Dependabot (github-actions) keeps them up to date.
+# Release, in two channels, with the shared Nexus release workflows of NexusSystem.
+# - Development: every push to main checks one version everywhere (native/Program.cs, the csproj, the plugin, its
+#   skill, server.json and CHANGELOG.md), runs test.ps1 and builds the release files with tools/package.ps1:
+#   NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundles
+#   nexus-agymail-X.Y.Z-win-x64.mcpb and nexus-agymail-X.Y.Z-win-arm64.mcpb, get.ps1 and SHA256SUMS.txt.
+#   product-dev-release attests them (Sigstore, keyless: `gh attestation verify <file> --repo pironjulien/NexusAGYmail`)
+#   and publishes the pre-release vX.Y.Z-dev.N (NexusSystem's development channel).
+# - Stable: "Run workflow" (promote: a vX.Y.Z-dev.N, or empty for the newest) runs product-promote: the SAME files
+#   become the release "NexusAGYmail X.Y.Z" (vX.Y.Z) with the CHANGELOG section. Then the `registry` job below sends
+#   server.json, with both bundles' URLs and SHA-256, to the official MCP registry (GitHub OIDC, namespace
+#   io.github.pironjulien; no token stored): the shared registry job lists a single .mcpb, this product lists two.
+#   registry: only re-send a stable release's server.json. get.ps1 installs from releases/latest.
+# Actions and shared workflows pinned by commit SHA; Dependabot (github-actions) keeps them up to date.
 name: Release
 
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      promote:
+        description: Development build to publish as stable (vX.Y.Z-dev.N; empty = the newest)
+        required: false
+        default: ''
+      registry:
+        description: Only send this stable release's server.json (vX.Y.Z) to the MCP registry again
+        required: false
+        default: ''
 
 permissions: {}
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  release:
-    if: github.repository == 'pironjulien/NexusAGYmail'
+  build:
+    if: github.event_name == 'push' && github.repository == 'pironjulien/NexusAGYmail'
     runs-on: windows-latest
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
     outputs:
-      mcpb-x64: ${{ steps.packages.outputs.mcpb-x64 }}
-      mcpb-arm64: ${{ steps.packages.outputs.mcpb-arm64 }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -32,52 +48,76 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           dotnet-version: 10.0.x
+      - name: One version everywhere
+        id: version
+        shell: pwsh
+        run: |
+          $version = [regex]::Match((Get-Content native/Program.cs -Raw), 'public const string Version = "([^"]+)"').Groups[1].Value
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "native/Program.cs: no X.Y.Z version ($version)." }
+          $server = Get-Content server.json -Raw | ConvertFrom-Json
+          $found = [ordered]@{
+            'native/NexusAGYmail.csproj' = ([xml](Get-Content native/NexusAGYmail.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+            'native/plugin/plugin.json' = (Get-Content native/plugin/plugin.json -Raw | ConvertFrom-Json).version
+            'native/plugin/skills/nexus-agymail/SKILL.md' = [regex]::Match((Get-Content native/plugin/skills/nexus-agymail/SKILL.md -Raw), '\(nexus-agymail (\d+\.\d+\.\d+)\)').Groups[1].Value
+            'CHANGELOG.md' = [regex]::Match((Get-Content CHANGELOG.md -Raw), '(?m)^## \[(\d+\.\d+\.\d+)\]').Groups[1].Value
+            'server.json' = $server.version
+          }
+          foreach ($arch in 'x64', 'arm64') {
+            $package = @($server.packages | Where-Object { $_.identifier -like "*-win-$arch.mcpb" })
+            $expected = "https://github.com/pironjulien/NexusAGYmail/releases/download/v$version/nexus-agymail-$version-win-$arch.mcpb"
+            $found["server.json $arch package"] = if ($package.Count -eq 1 -and $package[0].identifier -eq $expected) { $version } else { "$($package.identifier)" }
+          }
+          $wrong = @($found.GetEnumerator() | Where-Object { $_.Value -ne $version } | ForEach-Object { "$($_.Key)=$($_.Value)" })
+          if ($wrong) { throw "Version $version expected: $($wrong -join ', ')" }
+          "version=$version" >> $env:GITHUB_OUTPUT
       - name: Tests (test.ps1)
         shell: pwsh
         run: ./test.ps1
       - name: Packages
-        id: packages
         shell: pwsh
         env:
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $version = $env:TAG.TrimStart('v')
-          $server = Get-Content server.json -Raw | ConvertFrom-Json
-          if ($server.version -ne $version) { throw "server.json has version $($server.version), not $version." }
-          ./tools/package.ps1 -Version $version -Out dist
-          foreach ($arch in 'x64', 'arm64') {
-            $hash = (Get-FileHash "dist/nexus-agymail-$version-win-$arch.mcpb" -Algorithm SHA256).Hash.ToLowerInvariant()
-            "mcpb-$arch=$hash" >> $env:GITHUB_OUTPUT
-          }
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
-        id: provenance
+          # Zips, MCP bundles, get.ps1 and SHA256SUMS.txt (every other dist file, nothing else).
+          ./tools/package.ps1 -Version $env:VERSION -Out dist
+          Get-Content dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          subject-path: dist/*
-      - name: Provenance bundle
-        shell: pwsh
-        env:
-          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
-          TAG: ${{ github.ref_name }}
-        run: Copy-Item $env:BUNDLE "dist/NexusAGYmail-$($env:TAG.TrimStart('v')).intoto.jsonl"
-      - name: GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          $version = $env:TAG.TrimStart('v')
-          $lines = Get-Content CHANGELOG.md
-          $start = [Array]::FindIndex($lines, [Predicate[string]] { param($l) $l -like "## ``[$version``]*" })
-          if ($start -lt 0) { throw "CHANGELOG.md has no [$version] section." }
-          $end = [Array]::FindIndex($lines, $start + 1, [Predicate[string]] { param($l) $l -like '## *' })
-          if ($end -lt 0) { $end = $lines.Count }
-          $lines[($start + 1)..($end - 1)] | Set-Content notes.md -Encoding utf8NoBOM
-          gh release create $env:TAG (Get-ChildItem dist -File).FullName --title "NexusAGYmail $version" --notes-file notes.md --verify-tag
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 3
+
+  dev:
+    needs: build
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: pironjulien/NexusSystem/.github/workflows/product-dev-release.yml@a409925bafd1184acc207dd90ca4a43ba987d0e3  # v1.6.39
+    with:
+      product: NexusAGYmail
+      version: ${{ needs.build.outputs.version }}
+
+  promote:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'pironjulien/NexusAGYmail'
+    permissions:
+      contents: write
+      id-token: write
+    uses: pironjulien/NexusSystem/.github/workflows/product-promote.yml@a409925bafd1184acc207dd90ca4a43ba987d0e3  # v1.6.39
+    with:
+      product: NexusAGYmail
+      promote: ${{ inputs.promote }}
+      registry-only: ${{ inputs.registry }}
+      # No mcp-package: the registry lists both bundles (x64 and Arm64), sent by the `registry` job below.
 
   registry:
-    # server.json to the official MCP registry, with the bundle just published. mcp-publisher pinned by version and
-    # SHA-256; no token stored, no manual login.
-    needs: release
+    # server.json to the official MCP registry: both stable bundles, their URLs and their SHA-256 checked against the
+    # release's attested SHA256SUMS.txt. mcp-publisher pinned by version and SHA-256; no token stored, no manual login.
+    needs: promote
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && github.repository == 'pironjulien/NexusAGYmail' &&
+      (inputs.registry != '' || (needs.promote.result == 'success' && needs.promote.outputs.tag != ''))
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -89,21 +129,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Bundle SHA-256 into server.json
+      - name: server.json for this release
         env:
-          MCPB_X64: ${{ needs.release.outputs.mcpb-x64 }}
-          MCPB_ARM64: ${{ needs.release.outputs.mcpb-arm64 }}
+          TAG: ${{ inputs.registry || needs.promote.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Not a release tag: $TAG"; exit 1; }
+          version="${TAG#v}"
+          base="https://github.com/${REPOSITORY}/releases/download/${TAG}"
+          sums=$(curl -fsSL --retry 5 "$base/SHA256SUMS.txt" | tr -d '\r')
+          jq --arg v "$version" '.version = $v' server.json > server.release.json
           for arch in x64 arm64; do
-            var="MCPB_${arch^^}"; sha="${!var}"
-            [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "No $arch bundle SHA-256"; exit 1; }
-            jq --arg sha "$sha" --arg end "-win-$arch.mcpb" '(.packages[] | select(.identifier | endswith($end)) | .fileSha256) = $sha' server.json > server.tmp
-            mv server.tmp server.json
-            url=$(jq -r --arg end "-win-$arch.mcpb" '.packages[] | select(.identifier | endswith($end)) | .identifier' server.json)
-            curl -fsSL -o "bundle-$arch.mcpb" "$url"
-            echo "$sha  bundle-$arch.mcpb" | sha256sum --strict -c
+            package="nexus-agymail-$version-win-$arch.mcpb"
+            curl -fsSL --retry 5 -o "$package" "$base/$package"
+            sha=$(sha256sum "$package" | cut -d' ' -f1)
+            grep -qx "${sha}  ${package}" <<<"$sums" || { echo "$package differs from the attested SHA256SUMS.txt"; exit 1; }
+            jq --arg u "$base/$package" --arg s "$sha" --arg end "-win-$arch.mcpb" \
+              '(.packages[] | select(.identifier | endswith($end))) |= (.identifier = $u | .fileSha256 = $s)' \
+              server.release.json > server.tmp
+            mv server.tmp server.release.json
           done
+          cat server.release.json
       - name: Install mcp-publisher (pinned, checksum verified)
         run: |
           set -euo pipefail
@@ -112,4 +159,4 @@ jobs:
           echo "${PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --strict -c
           tar xzf mcp-publisher.tar.gz mcp-publisher
       - run: ./mcp-publisher login github-oidc
-      - run: ./mcp-publisher publish server.json
+      - run: ./mcp-publisher publish server.release.json

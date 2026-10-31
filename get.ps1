@@ -10,6 +10,7 @@
 # `gh attestation verify <file> --repo pironjulien/NexusAGYmail`), installs it in ~\.nexus\nexus-agymail\app\<version>
 # and runs `NexusAGYmail.exe setup`, which declares the server to Antigravity (plugin). Run it again to update.
 # NEXUS_PACK=1 (the Nexus pack): no question, no window; exit code 0 on success; a last "NEXUS_PACK_RESULT ..." line.
+# NEXUS_RELEASE_TAG (NexusSystem development channel): install that release (vX.Y.Z or vX.Y.Z-dev.N) instead of the latest.
 # For tests only: NEXUS_AGYMAIL_SOURCE (a local zip instead of the latest release) and NEXUS_AGYMAIL_ROOT (another
 # install folder). A local zip aimed at the real install folder is refused unless -Real is given.
 [CmdletBinding()]
@@ -33,6 +34,12 @@ $Package = "NexusAGYmail-$Arch.zip"
 function Say([string]$Text, [string]$Color = 'Gray') { if (-not $Pack) { Write-Host $Text -ForegroundColor $Color } }
 
 function Get-LatestTag {
+    # NEXUS_RELEASE_TAG (set by NexusSystem for its development channel): that release instead, a stable vX.Y.Z or a
+    # development vX.Y.Z-dev.N build, checked against its own SHA256SUMS.txt like any other.
+    if ($env:NEXUS_RELEASE_TAG) {
+        if ($env:NEXUS_RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+(-dev\.\d+)?$') { throw "NEXUS_RELEASE_TAG is not a release tag: $env:NEXUS_RELEASE_TAG" }
+        return $env:NEXUS_RELEASE_TAG
+    }
     # The latest release's tag from the redirect of github.com/<repo>/releases/latest: no GitHub API (60 anonymous
     # requests an hour per IP). The API stays as a fallback.
     try {

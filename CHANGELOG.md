@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.3] - 2026-10-31
+
+### Changed
+- Releases in two channels, with NexusSystem's shared release workflows: every push to main checks one version
+  everywhere, runs `test.ps1`, builds the release files (`tools/package.ps1`) and publishes them, attested, as the
+  development pre-release `vX.Y.Z-dev.N`; "Run workflow" promotes a tested development build, with the same files,
+  to the stable `vX.Y.Z`, then sends `server.json` with both MCP bundles to the official MCP registry. A version tag
+  no longer triggers a release.
+
+### Added
+- `get.ps1` honours `NEXUS_RELEASE_TAG` (a `vX.Y.Z` or `vX.Y.Z-dev.N` tag, set by NexusSystem's development
+  channel): it installs that release instead of the latest, checked against its own `SHA256SUMS.txt` like any other.
+
 ## [0.15.2] - 2026-10-30
 
 ### Fixed
