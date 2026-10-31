@@ -4,7 +4,6 @@
 
 [![Release](https://img.shields.io/github/v/release/pironjulien/NexusAGYmail)](https://github.com/pironjulien/NexusAGYmail/releases)
 [![Tests](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml/badge.svg)](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/pironjulien/NexusAGYmail/badge)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusAGYmail)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/pironjulien/NexusAGYmail/blob/main/LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?logo=dotnet&logoColor=white)](https://github.com/pironjulien/NexusAGYmail/blob/main/native/NexusAGYmail.csproj)
 [![MCP](https://img.shields.io/badge/MCP-server-7ee2a8)](https://modelcontextprotocol.io)

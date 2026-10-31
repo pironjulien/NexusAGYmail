@@ -5,7 +5,8 @@
 #   nexus-agymail-X.Y.Z-win-x64.mcpb and nexus-agymail-X.Y.Z-win-arm64.mcpb, get.ps1 and SHA256SUMS.txt.
 #   product-dev-release attests them (Sigstore, keyless: `gh attestation verify <file> --repo pironjulien/NexusAGYmail`)
 #   and publishes the pre-release vX.Y.Z-dev.N (NexusSystem's development channel).
-# - Stable: "Run workflow" (promote: a vX.Y.Z-dev.N, or empty for the newest) runs product-promote: the SAME files
+# - Stable: right after that build when its version is not released yet, or "Run workflow" (promote: a vX.Y.Z-dev.N,
+#   or empty for the newest), product-promote runs: the SAME files
 #   become the release "NexusAGYmail X.Y.Z" (vX.Y.Z) with the CHANGELOG section. Then the `registry` job below sends
 #   server.json, with both bundles' URLs and SHA-256, to the official MCP registry (GitHub OIDC, namespace
 #   io.github.pironjulien; no token stored): the shared registry job lists a single .mcpb, this product lists two.
@@ -94,20 +95,22 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: pironjulien/NexusSystem/.github/workflows/product-dev-release.yml@a409925bafd1184acc207dd90ca4a43ba987d0e3  # v1.6.39
+    uses: pironjulien/NexusSystem/.github/workflows/product-dev-release.yml@9cf03f2ac93e207307351b393130ff1cfe2aef7b  # v1.6.40
     with:
       product: NexusAGYmail
       version: ${{ needs.build.outputs.version }}
 
   promote:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'pironjulien/NexusAGYmail'
+    # Right after the push that built a new version (same files), or by hand ("Run workflow").
+    needs: dev
+    if: always() && (needs.dev.result == 'success' || github.event_name == 'workflow_dispatch') && github.repository == 'pironjulien/NexusAGYmail'
     permissions:
       contents: write
       id-token: write
-    uses: pironjulien/NexusSystem/.github/workflows/product-promote.yml@a409925bafd1184acc207dd90ca4a43ba987d0e3  # v1.6.39
+    uses: pironjulien/NexusSystem/.github/workflows/product-promote.yml@9cf03f2ac93e207307351b393130ff1cfe2aef7b  # v1.6.40
     with:
       product: NexusAGYmail
-      promote: ${{ inputs.promote }}
+      promote: ${{ inputs.promote || needs.dev.outputs.tag }}
       registry-only: ${{ inputs.registry }}
       # No mcp-package: the registry lists both bundles (x64 and Arm64), sent by the `registry` job below.
 
@@ -116,7 +119,7 @@ jobs:
     # release's attested SHA256SUMS.txt. mcp-publisher pinned by version and SHA-256; no token stored, no manual login.
     needs: promote
     if: >-
-      always() && github.event_name == 'workflow_dispatch' && github.repository == 'pironjulien/NexusAGYmail' &&
+      always() && github.repository == 'pironjulien/NexusAGYmail' &&
       (inputs.registry != '' || (needs.promote.result == 'success' && needs.promote.outputs.tag != ''))
     runs-on: ubuntu-latest
     permissions:
