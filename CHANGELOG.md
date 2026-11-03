@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-03
+
+### Fixed
+- The agent guide handles local authentication checks and launches the sign-in command itself. The user still
+  completes Google sign-in and OAuth consent in the browser; technical setup is no longer delegated to them.
+
 ## [0.16.0] - 2026-10-31
 
 ### Added

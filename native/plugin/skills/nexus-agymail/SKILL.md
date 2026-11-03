@@ -3,7 +3,7 @@ name: nexus-agymail
 description: The user's Gmail (signed-in account) through the nexus-agymail MCP server - search, read, attachments, drafts, labels, trash, send a draft after their yes. Also says which tool to pick for Gmail settings, another Google account, Calendar and Drive.
 ---
 
-# Gmail: which tool for what (nexus-agymail 0.16.0)
+# Gmail: which tool for what (nexus-agymail 0.16.1)
 
 ## 1. Pick the tool
 
@@ -15,9 +15,10 @@ description: The user's Gmail (signed-in account) through the nexus-agymail MCP 
 | Calendar | the Google Calendar plugin |
 | Drive, Docs, Sheets | the Google Drive plugin |
 
-First: `auth_status` when a tool answers `scopes`, `revoked` or `no_token`. When `reauth_required`: ask the user
-to run `NexusAGYmail.exe auth` (the command path is in this plugin's mcp_config.json; never you: it opens their
-browser for their consent).
+First: `auth_status` when a tool answers `scopes`, `revoked` or `no_token`. When `reauth_required`, handle the
+PC-side checks and launch `NexusAGYmail.exe auth` yourself (the command path is in this plugin's mcp_config.json).
+The user completes the Google sign-in and OAuth consent in their browser; never enter credentials or grant
+consent for them. Then verify `auth_status` again. Do not ask the user to run commands or investigate the setup.
 
 ## 2. nexus-agymail tools
 
