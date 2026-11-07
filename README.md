@@ -12,6 +12,7 @@ and sends a draft only after your explicit yes for that exact draft. Nothing is 
 [![Release](https://img.shields.io/github/v/release/pironjulien/NexusAGYmail?style=flat-square&label=release)](https://github.com/pironjulien/NexusAGYmail/releases/latest)
 [![Tests](https://img.shields.io/github/actions/workflow/status/pironjulien/NexusAGYmail/tests.yml?branch=main&style=flat-square&label=tests)](https://github.com/pironjulien/NexusAGYmail/actions/workflows/tests.yml)
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/pironjulien/NexusAGYmail?style=flat-square&label=scorecard)](https://scorecard.dev/viewer/?uri=github.com/pironjulien/NexusAGYmail)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16436/badge)](https://www.bestpractices.dev/projects/16436)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet&logoColor=white)](native/NexusAGYmail.csproj)
 [![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square)](#quick-start)
