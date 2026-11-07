@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -131,7 +132,7 @@ public sealed class AuthFlowTests : IDisposable
                     using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
                     string redirect = q["redirect_uri"];
                     using (var favicon = await http.GetAsync(redirect + "favicon.ico"))
-                        s.FaviconStatus = ((int)favicon.StatusCode).ToString();
+                        s.FaviconStatus = ((int)favicon.StatusCode).ToString(CultureInfo.InvariantCulture);
                     string state = s.ForgeState ? "forged-state" : q["state"];
                     string target = $"{redirect}?state={Uri.EscapeDataString(state)}&code={Uri.EscapeDataString(AuthCode)}" +
                                     $"&scope={Uri.EscapeDataString(string.Join(' ', GmailAuth.RequiredScopes))}";
@@ -215,7 +216,7 @@ public sealed class AuthFlowTests : IDisposable
     public void A_forged_state_is_refused_without_exchange()
     {
         var forged = Play(new Scenario { ForgeState = true, OldToken = OldToken(GmailAuth.RequiredScopes) }, "forged");
-        Assert.True(forged.Error is GmailAuthError { Code: "state" }, forged.Error?.ToString());
+        Assert.True(forged.Error is GmailAuthException { Code: "state" }, forged.Error?.ToString());
         Assert.Empty(forged.Fake!.Calls);
         Assert.Equal("rt-old", forged.Store!.Load()?["refresh_token"]?.GetValue<string>());
     }
@@ -245,7 +246,7 @@ public sealed class AuthFlowTests : IDisposable
     public void The_wait_is_bounded_and_ctrl_c_stops_it()
     {
         var idle = Play(new Scenario { BrowserIdle = true, Timeout = TimeSpan.FromMilliseconds(300) }, "idle");
-        Assert.True(idle.Error is GmailAuthError { Code: "timeout" }, idle.Error?.ToString());
+        Assert.True(idle.Error is GmailAuthException { Code: "timeout" }, idle.Error?.ToString());
         Assert.Empty(idle.Fake!.Calls);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         var cancelled = Play(new Scenario { BrowserIdle = true, Cancel = cts.Token }, "cancelled");

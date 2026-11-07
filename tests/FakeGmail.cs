@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -207,17 +208,17 @@ public sealed class FakeGmail : IAsyncDisposable
 
     private string Receive(JsonObject message)
     {
-        message["internalDate"] ??= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        message["internalDate"] ??= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture);
         Add(message);
         HistoryId++;
         var added = new JsonObject { ["id"] = message["id"]!.DeepClone(), ["threadId"] = message["threadId"]!.DeepClone(), ["labelIds"] = message["labelIds"]!.DeepClone() };
         History.Add(new JsonObject
         {
-            ["id"] = HistoryId.ToString(),
+            ["id"] = HistoryId.ToString(CultureInfo.InvariantCulture),
             ["messages"] = new JsonArray(added.DeepClone()),
             ["messagesAdded"] = new JsonArray(new JsonObject { ["message"] = added }),
         });
-        return HistoryId.ToString();
+        return HistoryId.ToString(CultureInfo.InvariantCulture);
     }
 
     public JsonObject AddDraft(string draftId, JsonObject message)
@@ -344,17 +345,17 @@ public sealed class FakeGmail : IAsyncDisposable
     private static string Q(Dictionary<string, StringValues> query, string key, string fallback = "") =>
         query.TryGetValue(key, out var v) && v.Count > 0 ? v[0]! : fallback;
 
-    private static JsonObject Page(IReadOnlyList<string> ids, Dictionary<string, StringValues> query, string name, Func<string, JsonNode> item)
+    private static JsonObject Page(List<string> ids, Dictionary<string, StringValues> query, string name, Func<string, JsonNode> item)
     {
-        int start = int.Parse(Q(query, "pageToken", "0"));
-        int size = int.Parse(Q(query, "maxResults", "100"));
+        int start = int.Parse(Q(query, "pageToken", "0"), CultureInfo.InvariantCulture);
+        int size = int.Parse(Q(query, "maxResults", "100"), CultureInfo.InvariantCulture);
         var data = new JsonObject
         {
             [name] = new JsonArray(ids.Skip(start).Take(size).Select(item).ToArray()),
             ["resultSizeEstimate"] = ids.Count,
         };
         if (start + size < ids.Count)
-            data["nextPageToken"] = (start + size).ToString();
+            data["nextPageToken"] = (start + size).ToString(CultureInfo.InvariantCulture);
         return data;
     }
 
@@ -411,21 +412,21 @@ public sealed class FakeGmail : IAsyncDisposable
                     new JsonObject { ["sendAsEmail"] = "test@example.com", ["isPrimary"] = true },
                     new JsonObject { ["sendAsEmail"] = "alias@example.com" }) });
             case "profile":
-                return (200, new JsonObject { ["emailAddress"] = "test@example.com", ["historyId"] = HistoryId.ToString(), ["messagesTotal"] = 0 });
+                return (200, new JsonObject { ["emailAddress"] = "test@example.com", ["historyId"] = HistoryId.ToString(CultureInfo.InvariantCulture), ["messagesTotal"] = 0 });
             case "history":
             {
-                long start = long.Parse(Q(query, "startHistoryId"));
+                long start = long.Parse(Q(query, "startHistoryId"), CultureInfo.InvariantCulture);
                 if (start < HistoryFloor)
                     return Missing();
                 string label = Q(query, "labelId");
-                var records = History.Where(r => long.Parse(r["id"]!.GetValue<string>()) > start &&
+                var records = History.Where(r => long.Parse(r["id"]!.GetValue<string>(), CultureInfo.InvariantCulture) > start &&
                     (label.Length == 0 || r["messagesAdded"]![0]!["message"]!["labelIds"]!.AsArray().Any(l => l!.GetValue<string>() == label))).ToList();
-                int first = int.Parse(Q(query, "pageToken", "0"));
-                int size = int.Parse(Q(query, "maxResults", "100"));
-                var history = new JsonObject { ["historyId"] = HistoryId.ToString() };
+                int first = int.Parse(Q(query, "pageToken", "0"), CultureInfo.InvariantCulture);
+                int size = int.Parse(Q(query, "maxResults", "100"), CultureInfo.InvariantCulture);
+                var history = new JsonObject { ["historyId"] = HistoryId.ToString(CultureInfo.InvariantCulture) };
                 var page = records.Skip(first).Take(size).Select(r => r.DeepClone()).ToArray();
                 if (page.Length > 0) history["history"] = new JsonArray(page);
-                if (first + size < records.Count) history["nextPageToken"] = (first + size).ToString();
+                if (first + size < records.Count) history["nextPageToken"] = (first + size).ToString(CultureInfo.InvariantCulture);
                 return (200, history);
             }
             case "attachment":
@@ -487,7 +488,7 @@ public sealed class FakeGmail : IAsyncDisposable
                 var sent = DraftMessage($"s{Sent.Count + 1}", raw, thread);
                 sent["threadId"] = string.IsNullOrEmpty(thread) ? sent["id"]!.DeepClone() : thread;
                 sent["labelIds"] = new JsonArray("SENT");
-                sent["internalDate"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+                sent["internalDate"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture);
                 Sent.Add(sent);
                 Add(sent);
                 if (LostSends > 0)  // sent, but the reply is lost: unknown outcome for the client
@@ -553,7 +554,7 @@ public sealed class FakeGmail : IAsyncDisposable
         var labels = LabelsOf(message);
         if (query.TryGetValue("labelIds", out var wanted) && wanted.Any(l => !labels.Contains(l!)))
             return false;
-        long received = long.Parse(message["internalDate"]?.GetValue<string>() ?? "0") / 1000;
+        long received = long.Parse(message["internalDate"]?.GetValue<string>() ?? "0", CultureInfo.InvariantCulture) / 1000;
         foreach (string term in Q(query, "q").Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             if (term.StartsWith("rfc822msgid:", StringComparison.Ordinal))
@@ -573,7 +574,7 @@ public sealed class FakeGmail : IAsyncDisposable
             var match = Bound.Match(term);
             if (!match.Success)
                 throw new InvalidOperationException($"fake Gmail: unsupported query term {term}");
-            long bound = long.Parse(match.Groups[2].Value);
+            long bound = long.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
             if ((match.Groups[1].Value == "after" && received < bound) || (match.Groups[1].Value == "before" && received >= bound))
                 return false;
         }

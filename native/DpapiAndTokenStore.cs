@@ -361,11 +361,11 @@ public static class Dpapi
     }
 }
 
-public sealed class TokenError : Exception
+public sealed class TokenException : Exception
 {
     public string Code { get; }
 
-    public TokenError(string code, string message) : base(message)
+    public TokenException(string code, string message) : base(message)
     {
         Code = code;
     }
@@ -430,7 +430,7 @@ public sealed class TokenStore
                 {
                     if (sw.Elapsed.TotalSeconds >= LockTimeoutSeconds)
                     {
-                        throw new TokenError(
+                        throw new TokenException(
                             "locked",
                             $"token held by another nexus-agymail server for {LockTimeoutSeconds:0} s ({LockPath}): try again");
                     }
@@ -507,7 +507,7 @@ public sealed class TokenStore
         }
         catch (DpapiError ex)
         {
-            throw new TokenError("unreadable", $"unreadable token ({ex.Message}): sign in again");
+            throw new TokenException("unreadable", $"unreadable token ({ex.Message}): sign in again");
         }
         return ParseTokenJson(Encoding.UTF8.GetString(plain), Path.GetFileName(TokenPath));
     }
@@ -553,13 +553,13 @@ public sealed class TokenStore
         {
             again = ReadEncrypted();
         }
-        catch (TokenError ex)
+        catch (TokenException ex)
         {
-            throw new TokenError("migration", $"migration to token.bin not read back ({ex.Message}): token.json kept");
+            throw new TokenException("migration", $"migration to token.bin not read back ({ex.Message}): token.json kept");
         }
 
         if (again.ToJsonString(CompactJsonOptions) != info.ToJsonString(CompactJsonOptions))
-            throw new TokenError("migration", "migration to token.bin read back different: token.json kept");
+            throw new TokenException("migration", "migration to token.bin read back different: token.json kept");
 
         File.Delete(LegacyPath);
         return info;
@@ -574,7 +574,7 @@ public sealed class TokenStore
         }
         catch (JsonException)
         {
-            throw new TokenError("corrupt", $"corrupt token ({sourceName}): sign in again");
+            throw new TokenException("corrupt", $"corrupt token ({sourceName}): sign in again");
         }
 
         if (node is not JsonObject obj ||
@@ -582,18 +582,18 @@ public sealed class TokenStore
             !rt.TryGetValue<string>(out string? refreshToken) ||
             string.IsNullOrWhiteSpace(refreshToken))
         {
-            throw new TokenError("corrupt", $"incomplete token ({sourceName}, no refresh_token): sign in again");
+            throw new TokenException("corrupt", $"incomplete token ({sourceName}, no refresh_token): sign in again");
         }
 
         return obj;
     }
 }
 
-public sealed class GmailAuthError : Exception
+public sealed class GmailAuthException : Exception
 {
     public string Code { get; }
 
-    public GmailAuthError(string code, string message) : base(message)
+    public GmailAuthException(string code, string message) : base(message)
     {
         Code = code;
     }
@@ -720,7 +720,7 @@ public static class GmailAuth
         {
             info = GetTokenStore().Load();
         }
-        catch (TokenError)
+        catch (TokenException)
         {
             return null;
         }
@@ -759,7 +759,7 @@ public static class GmailAuth
         {
             info = store.Load();
         }
-        catch (TokenError ex)
+        catch (TokenException ex)
         {
             return new JsonObject
             {
@@ -797,7 +797,7 @@ public static class GmailAuth
             {
                 var info = store.Load();
                 if (info is null)
-                    throw new GmailAuthError("no_token", $"no token ({store.TokenPath}): sign in first ({ReauthHint})");
+                    throw new GmailAuthException("no_token", $"no token ({store.TokenPath}): sign in first ({ReauthHint})");
 
                 string token = info["token"]?.GetValue<string>() ?? "";
                 string refreshToken = info["refresh_token"]?.GetValue<string>() ?? "";
@@ -807,7 +807,7 @@ public static class GmailAuth
 
                 if (string.IsNullOrEmpty(refreshToken) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
                 {
-                    throw new GmailAuthError("corrupt", $"incomplete token: sign in again ({ReauthHint})");
+                    throw new GmailAuthException("corrupt", $"incomplete token: sign in again ({ReauthHint})");
                 }
 
                 string? expiryStr = info["expiry"]?.GetValue<string>();
@@ -863,9 +863,9 @@ public static class GmailAuth
                     GrantedScopes(info));
             }
         }
-        catch (TokenError ex)
+        catch (TokenException ex)
         {
-            throw new GmailAuthError(ex.Code, ex.Message);
+            throw new GmailAuthException(ex.Code, ex.Message);
         }
     }
 
@@ -909,7 +909,7 @@ public static class GmailAuth
         }
         catch (Exception ex)  // network boundary: every transport failure becomes one refresh error
         {
-            throw new GmailAuthError("network", $"network: the token could not be refreshed ({ex.Message})");
+            throw new GmailAuthException("network", $"network: the token could not be refreshed ({ex.Message})");
         }
 
         using (response)
@@ -917,8 +917,8 @@ public static class GmailAuth
             if (!response.IsSuccessStatusCode)
             {
                 if (respBody.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase))
-                    throw new GmailAuthError("revoked", $"token revoked or expired: sign in again ({ReauthHint})");
-                throw new GmailAuthError("refused", $"token refresh refused by Google (HTTP {(int)response.StatusCode}); sign in again");
+                    throw new GmailAuthException("revoked", $"token revoked or expired: sign in again ({ReauthHint})");
+                throw new GmailAuthException("refused", $"token refresh refused by Google (HTTP {(int)response.StatusCode}); sign in again");
             }
         }
 
@@ -932,9 +932,9 @@ public static class GmailAuth
             refreshed = null;
         }
         if (refreshed is null)
-            throw new GmailAuthError("refused", "invalid token response from Google");
+            throw new GmailAuthException("refused", "invalid token response from Google");
         if (refreshed["access_token"] is not JsonValue at || !at.TryGetValue<string>(out string? access) || string.IsNullOrEmpty(access))
-            throw new GmailAuthError("refused", "missing access_token in Google refresh response");
+            throw new GmailAuthException("refused", "missing access_token in Google refresh response");
         return refreshed;
     }
 }

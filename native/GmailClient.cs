@@ -54,7 +54,7 @@ public sealed class GmailClient
         return req;
     }
 
-    private JsonNode SendRequest(HttpRequestMessage req)
+    private static JsonNode SendRequest(HttpRequestMessage req)
     {
         using var resp = HttpClient.Send(req);
         string text = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();

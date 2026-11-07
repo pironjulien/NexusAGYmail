@@ -52,7 +52,7 @@ internal sealed class MailOperations
     {
         string code = error switch
         {
-            GmailAuthError auth => auth.Code,
+            GmailAuthException auth => auth.Code,
             GmailApiException api when api.StatusCode == HttpStatusCode.NotFound => "not_found",
             GmailApiException api when (int)api.StatusCode == 429 || api.StatusCode == HttpStatusCode.Forbidden && RetryPolicy.Retryable(api, false) => "quota",
             GmailApiException api when api.StatusCode == HttpStatusCode.Forbidden => "forbidden",
@@ -104,9 +104,10 @@ internal sealed class MailOperations
             ["labels"] = message["labelIds"]?.DeepClone() ?? new JsonArray() };
         Remember(result, S(message["id"])); return result;
     }
+    private static readonly string[] AddressFields = ["from", "to", "cc", "bcc", "replyTo"];
     private void Remember(JsonObject value, string source)
     {
-        var lists = new[] { "from", "to", "cc", "bcc", "replyTo" }
+        var lists = AddressFields
             .Select(field => InternetAddressList.TryParse(S(value[field]), out var addresses) ? addresses : null).OfType<InternetAddressList>();
         foreach (var address in lists.SelectMany(addresses => addresses.Mailboxes)) origins[address.Address] = source;
     }
@@ -114,7 +115,7 @@ internal sealed class MailOperations
     {
         int size = Count(args, maximum: 50);
         string query = Arg(args, "query") + " -in:spam" + (Flag(args, "includeTrash") ? "" : " -in:trash");
-        var page = Get("threads", ("q", query), ("maxResults", size.ToString()), ("pageToken", Arg(args, "pageToken") is { Length: > 0 } token ? token : null), ("includeSpamTrash", Flag(args, "includeTrash") ? "true" : null));
+        var page = Get("threads", ("q", query), ("maxResults", size.ToString(CultureInfo.InvariantCulture)), ("pageToken", Arg(args, "pageToken") is { Length: > 0 } token ? token : null), ("includeSpamTrash", Flag(args, "includeTrash") ? "true" : null));
         var threads = new List<JsonObject>();
         foreach (var reference in page["threads"]?.AsArray() ?? new())
         {
@@ -147,7 +148,7 @@ internal sealed class MailOperations
     {
         if (entity.IsAttachment || !string.IsNullOrEmpty(entity.ContentDisposition?.FileName ?? entity.ContentType.Name) || entity is MessagePart) yield return (entity, id);
         else if (entity is Multipart multipart) for (int i = 0; i < multipart.Count; i++)
-            foreach (var pair in MimeParts(multipart[i], id.Length == 0 ? i.ToString() : id + "." + i)) yield return pair;
+            foreach (var pair in MimeParts(multipart[i], id.Length == 0 ? i.ToString(CultureInfo.InvariantCulture) : id + "." + i)) yield return pair;
     }
     private static JsonArray AttachmentInfo(MimeMessage message) => message.Body is null ? new() : Array(MimeParts(message.Body).Select(pair => new JsonObject
     {
@@ -246,7 +247,7 @@ internal sealed class MailOperations
             string anchor = pending is not null ? S(pending["anchor"]) : now;
             long cutoff = pending?["before"]?.GetValue<long>() ?? checkedAt + 1;
             var page = Get("messages", ("q", "after:" + bound + " before:" + cutoff),
-                ("labelIds", label.Length > 0 ? label : null), ("maxResults", size.ToString()),
+                ("labelIds", label.Length > 0 ? label : null), ("maxResults", size.ToString(CultureInfo.InvariantCulture)),
                 ("pageToken", pending is not null ? S(pending["pageToken"]) : null));
             ids.AddRange((page["messages"]?.AsArray() ?? new()).Select(m => S(m?["id"])));
             more = S(page["nextPageToken"]).Length > 0;
@@ -306,7 +307,7 @@ internal sealed class MailOperations
         }
         else if (node["parts"] is JsonArray children)
             for (int i = 0; i < children.Count; i++) if (children[i] is JsonObject part)
-                foreach (var child in Parts(part, prefix.Length == 0 ? i.ToString() : prefix + "." + i)) yield return child;
+                foreach (var child in Parts(part, prefix.Length == 0 ? i.ToString(CultureInfo.InvariantCulture) : prefix + "." + i)) yield return child;
     }
     private JsonObject Download(JsonObject args)
     {
@@ -437,7 +438,7 @@ internal sealed class MailOperations
     }
     private JsonObject Drafts(JsonObject args)
     {
-        int size = Count(args); var page = Get("drafts", ("maxResults", size.ToString()), ("q", Arg(args, "query")), ("pageToken", Arg(args, "pageToken") is { Length: > 0 } token ? token : null));
+        int size = Count(args); var page = Get("drafts", ("maxResults", size.ToString(CultureInfo.InvariantCulture)), ("q", Arg(args, "query")), ("pageToken", Arg(args, "pageToken") is { Length: > 0 } token ? token : null));
         var summaries = new List<JsonObject>();
         foreach (var reference in page["drafts"]?.AsArray() ?? new())
         {

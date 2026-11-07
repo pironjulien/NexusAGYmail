@@ -13,16 +13,18 @@ $repo = Split-Path $PSScriptRoot
 $work = Join-Path $env:USERPROFILE '.nexus\build\nexusagymail\release'
 if (-not $Out) { $Out = Join-Path $work 'dist' }
 
-$engine = [IO.File]::ReadAllText((Join-Path $repo 'native\Program.cs'))
-if ($engine -notmatch 'public const string Version = "([^"]+)"' -or $Matches[1] -ne $Version) {
-    throw "native\Program.cs has version $($Matches[1]), not $Version."
-}
+# The csproj <Version> is the engine's single version source (Program.Version reads it from the assembly).
+$declared = ([xml][IO.File]::ReadAllText((Join-Path $repo 'native\NexusAGYmail.csproj'))).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+if ($declared -ne $Version) { throw "native\NexusAGYmail.csproj has version $declared, not $Version." }
 foreach ($folder in $work, $Out) { if (Test-Path $folder) { Remove-Item $folder -Recurse -Force } }
 New-Item -ItemType Directory -Force $Out | Out-Null
 
 foreach ($rid in 'win-x64', 'win-arm64') {
     $publish = Join-Path $work $rid
-    dotnet publish (Join-Path $repo 'native\NexusAGYmail.csproj') -c Release -r $rid --self-contained true `
+    # Restore for both architectures (packages.lock.json, locked mode in CI), then publish this one without restoring.
+    dotnet restore (Join-Path $repo 'native\NexusAGYmail.csproj') -p:SelfContained=true -p:NexusBuild="$work\$rid-build\" -v q
+    if ($LASTEXITCODE) { throw "dotnet restore $rid failed." }
+    dotnet publish (Join-Path $repo 'native\NexusAGYmail.csproj') -c Release -r $rid --self-contained true --no-restore `
         -p:PublishSingleFile=true -p:DebugType=none -p:NexusBuild="$work\$rid-build\" -o $publish -v q
     if ($LASTEXITCODE) { throw "dotnet publish $rid failed." }
     $zip = Join-Path $Out "NexusAGYmail-$rid.zip"

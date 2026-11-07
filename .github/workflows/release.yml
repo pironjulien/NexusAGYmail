@@ -1,5 +1,5 @@
 # Release, in two channels, with the shared Nexus release workflows of NexusSystem.
-# - Development: every push to main checks one version everywhere (native/Program.cs, the csproj, the plugin, its
+# - Development: every push to main checks one version everywhere (the csproj, the plugin, its
 #   skill, server.json and CHANGELOG.md), runs test.ps1 and builds the release files with tools/package.ps1:
 #   NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundles
 #   nexus-agymail-X.Y.Z-win-x64.mcpb and nexus-agymail-X.Y.Z-win-arm64.mcpb, get.ps1 and SHA256SUMS.txt.
@@ -48,16 +48,15 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
       - name: One version everywhere
         id: version
         shell: pwsh
         run: |
-          $version = [regex]::Match((Get-Content native/Program.cs -Raw), 'public const string Version = "([^"]+)"').Groups[1].Value
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "native/Program.cs: no X.Y.Z version ($version)." }
+          $version = ([xml](Get-Content native/NexusAGYmail.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "native/NexusAGYmail.csproj: no X.Y.Z version ($version)." }
           $server = Get-Content server.json -Raw | ConvertFrom-Json
           $found = [ordered]@{
-            'native/NexusAGYmail.csproj' = ([xml](Get-Content native/NexusAGYmail.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
             'native/plugin/plugin.json' = (Get-Content native/plugin/plugin.json -Raw | ConvertFrom-Json).version
             'native/plugin/skills/nexus-agymail/SKILL.md' = [regex]::Match((Get-Content native/plugin/skills/nexus-agymail/SKILL.md -Raw), '\(nexus-agymail (\d+\.\d+\.\d+)\)').Groups[1].Value
             'CHANGELOG.md' = [regex]::Match((Get-Content CHANGELOG.md -Raw), '(?m)^## \[(\d+\.\d+\.\d+)\]').Groups[1].Value
@@ -95,7 +94,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
-    uses: pironjulien/NexusSystem/.github/workflows/product-dev-release.yml@9cf03f2ac93e207307351b393130ff1cfe2aef7b  # v1.6.40
+    uses: pironjulien/NexusSystem/.github/workflows/product-dev-release.yml@585aa435089995a78b7c3a4c457ba727c9f89840  # v1.6.54
     with:
       product: NexusAGYmail
       version: ${{ needs.build.outputs.version }}
@@ -107,7 +106,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
-    uses: pironjulien/NexusSystem/.github/workflows/product-promote.yml@9cf03f2ac93e207307351b393130ff1cfe2aef7b  # v1.6.40
+    uses: pironjulien/NexusSystem/.github/workflows/product-promote.yml@585aa435089995a78b7c3a4c457ba727c9f89840  # v1.6.54
     with:
       product: NexusAGYmail
       promote: ${{ inputs.promote || needs.dev.outputs.tag }}

@@ -9,6 +9,8 @@
     <AssemblyName>NexusAGYmail</AssemblyName>
     <RootNamespace>NexusAGYmail</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- Both release architectures in the restore graph, so packages.lock.json covers the self-contained publishes. -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MimeKit" Version="4.18.2" />

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -37,7 +38,7 @@ internal static class Diagnostics
                 ["issue"] = success ? "✓" : status == "confirmation_required" ? "refus" : "✗", ["ms"] = milliseconds,
                 ["premier_plan"] = false, ["erreur"] = success ? null : result["code"]?.DeepClone() ?? JsonValue.Create("error") };
             string directory = Path.Join(root, "agymail", agent); Directory.CreateDirectory(directory);
-            File.AppendAllText(Path.Join(directory, now.ToString("yyyy-MM") + ".jsonl"), line.ToJsonString() + "\n", new UTF8Encoding(false));
+            File.AppendAllText(Path.Join(directory, now.ToString("yyyy-MM", CultureInfo.InvariantCulture) + ".jsonl"), line.ToJsonString() + "\n", new UTF8Encoding(false));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* Journal is metadata-only and non-blocking. */ }
     }

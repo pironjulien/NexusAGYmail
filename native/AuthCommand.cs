@@ -42,7 +42,7 @@ public static class AuthCommand
             }
         }
 
-        var io = Guide.ForConsole(openBrowser);
+        using var io = Guide.ForConsole(openBrowser);
         Console.CancelKeyPress += io.OnCancel;
         try
         {
@@ -54,12 +54,12 @@ public static class AuthCommand
             Console.Error.WriteLine("Cancelled.");
             return 130;
         }
-        catch (GmailAuthError ex)
+        catch (GmailAuthException ex)
         {
             Console.Error.WriteLine($"Sign-in failed ({ex.Code}): {ex.Message}");
             return 1;
         }
-        catch (TokenError ex)
+        catch (TokenException ex)
         {
             Console.Error.WriteLine($"Token not saved ({ex.Code}): {ex.Message}");
             return 1;
@@ -72,7 +72,7 @@ public static class AuthCommand
 }
 
 /// <summary>Inputs and outputs of the guide (replaced by fakes in the tests).</summary>
-public sealed class GuideIo
+public sealed class GuideIo : IDisposable
 {
     public Action<string> Say { get; init; } = Console.Error.WriteLine;
     public Func<string, string> Ask { get; init; } = prompt => { Console.Error.Write(prompt); return Console.ReadLine() ?? ""; };
@@ -90,6 +90,7 @@ public sealed class GuideIo
     public CancellationToken Token => cancel.Token;
     public void Rearm() { if (cancel.IsCancellationRequested) cancel = new(); }
     public void OnCancel(object? sender, ConsoleCancelEventArgs e) { e.Cancel = true; cancel.Cancel(); }
+    public void Dispose() => cancel.Dispose();
 }
 
 public sealed class Guide(GuideIo io)

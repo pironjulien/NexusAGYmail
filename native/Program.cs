@@ -1,12 +1,14 @@
 using System;
+using System.Reflection;
 using System.Text.Json.Nodes;
 
 namespace NexusAGYmail;
 
 public static class Program
 {
-    // Same version as NexusAGYmail.csproj, plugin/plugin.json and the top section of CHANGELOG.md (checked by the tests).
-    public const string Version = "0.16.2";
+    // From <Version> of NexusAGYmail.csproj, the single source (the build stamps it); plugin/plugin.json, the skill,
+    // server.json and the top section of CHANGELOG.md must match it (checked by the tests and the release).
+    public static string Version { get; } = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
 
     public static int Main(string[] args)
     {

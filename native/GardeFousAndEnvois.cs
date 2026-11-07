@@ -71,7 +71,7 @@ internal sealed class StateFile
     {
         public void Dispose() { using (stream) stream.Unlock(0, 1); }
     }
-    private IDisposable Lock()
+    private Lease Lock()
     {
         var stream = new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
         var until = DateTime.UtcNow.AddSeconds(30);
@@ -143,7 +143,7 @@ public sealed class HistoryTracker
         var entry = Load(account, label);
         return (ulong.TryParse(entry["historyId"]?.ToString(), out var value) ? value : null, entry["checked_at"]?.GetValue<long>());
     }
-    public void SaveCursor(string account, string label, ulong historyId, long at) => Save(account, label, historyId.ToString(), at, true);
+    public void SaveCursor(string account, string label, ulong historyId, long at) => Save(account, label, historyId.ToString(CultureInfo.InvariantCulture), at, true);
     public void Save(string account, string label, string historyId, long bound, bool advance, JsonObject? catchUp = null, bool manageCatchUp = false) => file.Transaction(data =>
     {
         string key = account.ToLowerInvariant();

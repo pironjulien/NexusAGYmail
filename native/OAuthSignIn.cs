@@ -132,17 +132,17 @@ public sealed class OAuthSignIn
         }
         catch (JsonException ex)
         {
-            throw new GmailAuthError("client", $"unreadable OAuth client ({path}): {ex.Message}");
+            throw new GmailAuthException("client", $"unreadable OAuth client ({path}): {ex.Message}");
         }
 
         var section = data?["installed"] as JsonObject ?? data?["web"] as JsonObject
-            ?? throw new GmailAuthError("client", $"Client secrets must be for a web or installed app ({path}).");
+            ?? throw new GmailAuthException("client", $"Client secrets must be for a web or installed app ({path}).");
         string Str(string key, string fallback = "") =>
             section[key] is JsonValue v && v.TryGetValue<string>(out string? s) && !string.IsNullOrEmpty(s) ? s : fallback;
 
         string clientId = Str("client_id");
         if (string.IsNullOrEmpty(clientId))
-            throw new GmailAuthError("client", $"OAuth client without client_id ({path}).");
+            throw new GmailAuthException("client", $"OAuth client without client_id ({path}).");
         return new OAuthClientConfig(clientId, Str("client_secret"), Str("auth_uri", DefaultAuthUri), Str("token_uri", DefaultTokenUri), Str("project_id"));
     }
 
@@ -204,7 +204,7 @@ public sealed class OAuthSignIn
         {
             old = store.Load();
         }
-        catch (TokenError)
+        catch (TokenException)
         {
             old = null;
         }
@@ -303,7 +303,7 @@ public sealed class OAuthSignIn
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            throw new GmailAuthError(
+            throw new GmailAuthException(
                 "timeout",
                 $"timed out waiting for the sign-in in the browser ({Timeout.TotalSeconds:0} s): run {GmailAuth.ReauthHint} again");
         }
@@ -348,20 +348,20 @@ public sealed class OAuthSignIn
             !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(state), Encoding.UTF8.GetBytes(expectedState)))
         {
             await RespondAsync(stream, 400, "Bad Request", "NexusAGYmail: this sign-in answer does not match the request. Run auth again.", ct).ConfigureAwait(false);
-            throw new GmailAuthError("state", "(mismatching_state) the sign-in answer does not match this request (state differs): nothing saved, run auth again");
+            throw new GmailAuthException("state", "(mismatching_state) the sign-in answer does not match this request (state differs): nothing saved, run auth again");
         }
 
         if (query.TryGetValue("error", out string? error))
         {
             await RespondAsync(stream, 400, "Bad Request", $"NexusAGYmail: Google refused the sign-in ({error}).", ct).ConfigureAwait(false);
             query.TryGetValue("error_description", out string? description);
-            throw new GmailAuthError("refused", $"({error}) Google refused the sign-in{(string.IsNullOrEmpty(description) ? "" : ": " + description)}");
+            throw new GmailAuthException("refused", $"({error}) Google refused the sign-in{(string.IsNullOrEmpty(description) ? "" : ": " + description)}");
         }
 
         if (!query.TryGetValue("code", out string? code) || string.IsNullOrEmpty(code))
         {
             await RespondAsync(stream, 400, "Bad Request", "NexusAGYmail: no authorization code in Google's answer.", ct).ConfigureAwait(false);
-            throw new GmailAuthError("refused", "no authorization code in Google's answer: run auth again");
+            throw new GmailAuthException("refused", "no authorization code in Google's answer: run auth again");
         }
 
         await RespondAsync(stream, 200, "OK", SuccessMessage, ct).ConfigureAwait(false);
@@ -448,7 +448,7 @@ public sealed class OAuthSignIn
         }
         catch (Exception ex)  // network boundary: every transport failure becomes one sign-in error
         {
-            throw new GmailAuthError("network", $"network: the sign-in code could not be exchanged ({ex.Message})");
+            throw new GmailAuthException("network", $"network: the sign-in code could not be exchanged ({ex.Message})");
         }
 
         JsonObject? json = null;
@@ -459,14 +459,14 @@ public sealed class OAuthSignIn
         {
             string error = json?["error"]?.ToString() ?? "";
             string description = json?["error_description"]?.ToString() ?? "";
-            throw new GmailAuthError(
+            throw new GmailAuthException(
                 "refused",
                 $"Google refused the sign-in code (HTTP {(int)status}{(error.Length > 0 ? ", " + error : "")}{(description.Length > 0 ? ": " + description : "")})");
         }
         if (json is null || json["access_token"] is not JsonValue at || !at.TryGetValue<string>(out string? access) || string.IsNullOrEmpty(access))
-            throw new GmailAuthError("refused", "invalid token response from Google (no access_token)");
+            throw new GmailAuthException("refused", "invalid token response from Google (no access_token)");
         if (json["refresh_token"] is not JsonValue rt || !rt.TryGetValue<string>(out string? refresh) || string.IsNullOrEmpty(refresh))
-            throw new GmailAuthError("refused", "Google returned no refresh_token: nothing saved, run auth again");
+            throw new GmailAuthException("refused", "Google returned no refresh_token: nothing saved, run auth again");
         return json;
     }
 
@@ -562,7 +562,7 @@ public sealed class OAuthSignIn
                 ct).ConfigureAwait(false);
             return true;
         }
-        catch (GmailAuthError ex)
+        catch (GmailAuthException ex)
         {
             return ex.Code != "revoked"; // réseau ou autre refus : rien de prouvé, le jeton reste en place
         }

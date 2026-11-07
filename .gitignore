@@ -1,6 +1,7 @@
 # Build outputs (normally outside the repository: ~\.nexus\build\nexusagymail, see Directory.Build.props)
 bin/
 obj/
+TestResults/
 dist/
 *.user
 .vs/

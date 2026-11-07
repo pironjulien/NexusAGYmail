@@ -107,17 +107,17 @@ public static class AttachmentSecurity
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle file, StringBuilder path, uint length, uint flags);
+    private static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle file, [Out] char[] path, uint length, uint flags);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint attributes, IntPtr template);
 
     private static string FinalPath(Microsoft.Win32.SafeHandles.SafeFileHandle handle)
     {
-        var target = new StringBuilder(32768);
-        uint length = GetFinalPathNameByHandleW(handle, target, (uint)target.Capacity, 0);
-        if (length == 0 || length >= target.Capacity) throw new IOException("Attachment path could not be resolved");
-        string resolved = target.ToString();
+        var target = new char[32768];
+        uint length = GetFinalPathNameByHandleW(handle, target, (uint)target.Length, 0);
+        if (length == 0 || length >= target.Length) throw new IOException("Attachment path could not be resolved");
+        string resolved = new(target, 0, (int)length);
         if (resolved.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return @"\\" + resolved[8..];
         return resolved.StartsWith(@"\\?\", StringComparison.Ordinal) ? resolved[4..] : resolved;
     }
@@ -303,6 +303,7 @@ public static class MimeHelper
         return Convert.FromBase64String(padded);
     }
 
+    private static readonly char[] AddressSeparators = [',', ';'];
     public static string NormalizeAddresses(string? addresses, string fieldName, bool required = false)
     {
         if (string.IsNullOrWhiteSpace(addresses))
@@ -315,7 +316,7 @@ public static class MimeHelper
             throw new ArgumentException($"{fieldName}: line breaks are forbidden");
 
         var clean = CleanInvisible(addresses).Trim();
-        var parts = clean.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+        var parts = clean.Split(AddressSeparators, StringSplitOptions.RemoveEmptyEntries);
         var resultList = new List<string>();
 
         foreach (string item in parts.Select(p => p.Trim()))
@@ -351,14 +352,14 @@ public static class MimeHelper
         var sb = new StringBuilder();
         string boundary = "----=_Part_" + Guid.NewGuid().ToString("N");
 
-        sb.Append($"To: {to}\r\n");
-        if (!string.IsNullOrWhiteSpace(cc)) sb.Append($"Cc: {cc}\r\n");
-        if (!string.IsNullOrWhiteSpace(bcc)) sb.Append($"Bcc: {bcc}\r\n");
-        sb.Append($"Subject: {EncodeHeaderValue(subject)}\r\n");
+        sb.Append(CultureInfo.InvariantCulture, $"To: {to}\r\n");
+        if (!string.IsNullOrWhiteSpace(cc)) sb.Append(CultureInfo.InvariantCulture, $"Cc: {cc}\r\n");
+        if (!string.IsNullOrWhiteSpace(bcc)) sb.Append(CultureInfo.InvariantCulture, $"Bcc: {bcc}\r\n");
+        sb.Append(CultureInfo.InvariantCulture, $"Subject: {EncodeHeaderValue(subject)}\r\n");
 
-        if (!string.IsNullOrWhiteSpace(inReplyTo)) sb.Append($"In-Reply-To: {inReplyTo}\r\n");
-        if (!string.IsNullOrWhiteSpace(references)) sb.Append($"References: {references}\r\n");
-        else if (!string.IsNullOrWhiteSpace(inReplyTo)) sb.Append($"References: {inReplyTo}\r\n");
+        if (!string.IsNullOrWhiteSpace(inReplyTo)) sb.Append(CultureInfo.InvariantCulture, $"In-Reply-To: {inReplyTo}\r\n");
+        if (!string.IsNullOrWhiteSpace(references)) sb.Append(CultureInfo.InvariantCulture, $"References: {references}\r\n");
+        else if (!string.IsNullOrWhiteSpace(inReplyTo)) sb.Append(CultureInfo.InvariantCulture, $"References: {inReplyTo}\r\n");
 
         sb.Append("MIME-Version: 1.0\r\n");
 
@@ -371,10 +372,10 @@ public static class MimeHelper
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
 
-        sb.Append($"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n");
+        sb.Append(CultureInfo.InvariantCulture, $"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n");
 
         // Body part
-        sb.Append($"--{boundary}\r\n");
+        sb.Append(CultureInfo.InvariantCulture, $"--{boundary}\r\n");
         sb.Append("Content-Type: text/plain; charset=utf-8\r\n");
         sb.Append("Content-Transfer-Encoding: 8bit\r\n\r\n");
         sb.Append(body ?? "");
@@ -388,9 +389,9 @@ public static class MimeHelper
         foreach (var att in attachments)
         {
             partHeader.Clear();
-            partHeader.Append($"--{boundary}\r\n");
-            partHeader.Append($"Content-Type: {att.MimeType}; name=\"{EscapeHeaderParam(att.Name)}\"\r\n");
-            partHeader.Append($"Content-Disposition: attachment; filename=\"{EscapeHeaderParam(att.Name)}\"\r\n");
+            partHeader.Append(CultureInfo.InvariantCulture, $"--{boundary}\r\n");
+            partHeader.Append(CultureInfo.InvariantCulture, $"Content-Type: {att.MimeType}; name=\"{EscapeHeaderParam(att.Name)}\"\r\n");
+            partHeader.Append(CultureInfo.InvariantCulture, $"Content-Disposition: attachment; filename=\"{EscapeHeaderParam(att.Name)}\"\r\n");
             partHeader.Append("Content-Transfer-Encoding: base64\r\n\r\n");
 
             byte[] partHeaderBytes = Encoding.UTF8.GetBytes(partHeader.ToString());

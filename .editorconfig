@@ -1,0 +1,8 @@
+root = true
+
+[*.cs]
+# Analyzers: AnalysisLevel latest-recommended, warnings as errors (native\Directory.Build.props, tests\Directory.Build.props).
+
+[tests/**.cs]
+# xUnit test names read as sentences with underscores (Method_State_Result).
+dotnet_diagnostic.CA1707.severity = none
