@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.8] - 2026-11-07
+
+### Changed
+- Win32 calls (DPAPI, token file permissions, attachment path resolution) are source-generated `[LibraryImport]`
+  declarations instead of runtime-marshalled `[DllImport]`; the build now fails on a `[DllImport]` (SYSLIB1054).
+- Every version of this changelog links to its changes on GitHub, checked by the tests.
+
+### Removed
+- Non-Windows code paths that could never run in this Windows-only build: the token is always DPAPI-encrypted and
+  attachment paths are always resolved by Windows (the `0600` token file of macOS and Linux noted in 0.8.0 is gone).
+
 ## [0.16.7] - 2026-11-07
 
 ### Fixed
@@ -444,3 +455,40 @@ First public release.
   (Antigravity plugin with a skill; `NEXUS_PACK=1` for the Nexus pack), `nexus-agymail status`.
 - Token encrypted with DPAPI on Windows, a `0600` file on macOS and Linux, written atomically under a lock.
 - Retries with exponential backoff on 429 and 5xx, batched reads, bounded sizes, exact error codes.
+
+[Unreleased]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.8...HEAD
+[0.16.8]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.7...v0.16.8
+[0.16.7]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.6...v0.16.7
+[0.16.6]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.5...v0.16.6
+[0.16.5]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.4...v0.16.5
+[0.16.4]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.3...v0.16.4
+[0.16.3]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.2...v0.16.3
+[0.16.2]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.1...v0.16.2
+[0.16.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.0...v0.16.1
+[0.16.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.15.4...v0.16.0
+[0.15.4]: https://github.com/pironjulien/NexusAGYmail/compare/v0.15.3...v0.15.4
+[0.15.3]: https://github.com/pironjulien/NexusAGYmail/compare/v0.15.2...v0.15.3
+[0.15.2]: https://github.com/pironjulien/NexusAGYmail/compare/v0.15.0...v0.15.2
+[0.15.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.14.2...v0.15.0
+[0.14.2]: https://github.com/pironjulien/NexusAGYmail/compare/v0.14.1...v0.14.2
+[0.14.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.14.0...v0.14.1
+[0.14.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.12.3...v0.13.0
+[0.12.3]: https://github.com/pironjulien/NexusAGYmail/compare/v0.12.2...v0.12.3
+[0.12.2]: https://github.com/pironjulien/NexusAGYmail/compare/v0.12.1...v0.12.2
+[0.12.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.12.0...v0.12.1
+[0.12.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.11.5...v0.12.0
+[0.11.5]: https://github.com/pironjulien/NexusAGYmail/compare/v0.11.4...v0.11.5
+[0.11.4]: https://github.com/pironjulien/NexusAGYmail/compare/v0.11.3...v0.11.4
+[0.11.3]: https://github.com/pironjulien/NexusAGYmail/compare/v0.11.2...v0.11.3
+[0.11.2]: https://github.com/pironjulien/NexusAGYmail/compare/v0.11.1...v0.11.2
+[0.11.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.11.0...v0.11.1
+[0.11.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.10.4...v0.11.0
+[0.10.4]: https://github.com/pironjulien/NexusAGYmail/compare/v0.10.3...v0.10.4
+[0.10.3]: https://github.com/pironjulien/NexusAGYmail/compare/v0.10.2...v0.10.3
+[0.10.2]: https://github.com/pironjulien/NexusAGYmail/compare/v0.10.1...v0.10.2
+[0.10.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.8.1...v0.9.0
+[0.8.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/pironjulien/NexusAGYmail/releases/tag/v0.8.0

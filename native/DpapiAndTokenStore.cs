@@ -26,7 +26,7 @@ public sealed class DpapiException : IOException
     }
 }
 
-public static class Dpapi
+public static partial class Dpapi
 {
     // Entropie figée à l'ancien nom (NexusGmail) : compatibilité totale avec dpapi.py et les jetons existants.
     public static readonly byte[] DefaultEntropy = Encoding.ASCII.GetBytes("nexus-gmail/token/v1");
@@ -38,8 +38,6 @@ public static class Dpapi
     private const uint DACL_SECURITY_INFORMATION = 0x00000004;
     private const uint PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000;
     private const uint SDDL_REVISION_1 = 1;
-
-    public static bool Encrypted => OperatingSystem.IsWindows();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct DATA_BLOB
@@ -55,8 +53,9 @@ public static class Dpapi
         public uint Attributes;
     }
 
-    [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CryptProtectData(
+    [LibraryImport("crypt32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CryptProtectData(
         ref DATA_BLOB pDataIn,
         string? szDataDescr,
         ref DATA_BLOB pOptionalEntropy,
@@ -65,8 +64,9 @@ public static class Dpapi
         uint dwFlags,
         out DATA_BLOB pDataOut);
 
-    [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CryptProtectData(
+    [LibraryImport("crypt32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CryptProtectData(
         ref DATA_BLOB pDataIn,
         string? szDataDescr,
         IntPtr pOptionalEntropy,
@@ -75,8 +75,9 @@ public static class Dpapi
         uint dwFlags,
         out DATA_BLOB pDataOut);
 
-    [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CryptUnprotectData(
+    [LibraryImport("crypt32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CryptUnprotectData(
         ref DATA_BLOB pDataIn,
         IntPtr ppszDataDescr,
         ref DATA_BLOB pOptionalEntropy,
@@ -85,8 +86,9 @@ public static class Dpapi
         uint dwFlags,
         out DATA_BLOB pDataOut);
 
-    [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CryptUnprotectData(
+    [LibraryImport("crypt32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CryptUnprotectData(
         ref DATA_BLOB pDataIn,
         IntPtr ppszDataDescr,
         IntPtr pOptionalEntropy,
@@ -95,47 +97,50 @@ public static class Dpapi
         uint dwFlags,
         out DATA_BLOB pDataOut);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr LocalFree(IntPtr hMem);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial IntPtr LocalFree(IntPtr hMem);
 
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetCurrentProcess();
+    [LibraryImport("kernel32.dll")]
+    private static partial IntPtr GetCurrentProcess();
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr hObject);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(IntPtr hObject);
 
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
 
-    [DllImport("advapi32.dll", SetLastError = true)]
-    private static extern bool GetTokenInformation(
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetTokenInformation(
         IntPtr TokenHandle,
         int TokenInformationClass,
         IntPtr TokenInformation,
         uint TokenInformationLength,
         out uint ReturnLength);
 
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool ConvertSidToStringSidW(IntPtr Sid, out IntPtr StringSid);
+    [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ConvertSidToStringSidW(IntPtr Sid, out IntPtr StringSid);
 
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(
+    [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ConvertStringSecurityDescriptorToSecurityDescriptorW(
         string StringSecurityDescriptor,
         uint StringSDRevision,
         out IntPtr SecurityDescriptor,
         IntPtr SecurityDescriptorSize);
 
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool SetFileSecurityW(
+    [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetFileSecurityW(
         string lpFileName,
         uint SecurityInformation,
         IntPtr pSecurityDescriptor);
 
     public static unsafe byte[] Protect(ReadOnlySpan<byte> data, ReadOnlySpan<byte> entropy = default, bool useDefaultEntropy = true)
     {
-        if (!Encrypted)
-            return data.ToArray();
-
         ReadOnlySpan<byte> actualEntropy = entropy.IsEmpty && useDefaultEntropy ? DefaultEntropy : entropy;
         byte dummyData = 0;
         byte dummyEnt = 0;
@@ -194,9 +199,6 @@ public static class Dpapi
 
     public static byte[] Unprotect(ReadOnlySpan<byte> data, ReadOnlySpan<byte> entropy = default, bool useDefaultEntropy = true)
     {
-        if (!Encrypted)
-            return data.ToArray();
-
         if (data.StartsWith(Dpapi1Prefix))
         {
             var stripped = data[Dpapi1Prefix.Length..];
@@ -318,9 +320,6 @@ public static class Dpapi
 
     public static void RestrictToCurrentUser(string path)
     {
-        if (!Encrypted)
-            return;
-
         string sid = CurrentUserSid();
         string sddl = $"D:P(A;;FA;;;{sid})";
         if (ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, out IntPtr descriptor, IntPtr.Zero))
@@ -472,7 +471,7 @@ public sealed class TokenStore
     public string? Describe()
     {
         if (File.Exists(TokenPath))
-            return Dpapi.Encrypted ? "token.bin (DPAPI-encrypted)" : "token.bin (readable by your account only)";
+            return "token.bin (DPAPI-encrypted)";
         if (File.Exists(LegacyPath))
             return "token.json (plain text, migrated on first load)";
         return null;

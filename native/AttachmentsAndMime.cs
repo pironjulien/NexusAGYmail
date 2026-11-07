@@ -14,7 +14,7 @@ using System.Text.RegularExpressions;
 
 namespace NexusAGYmail;
 
-public static class AttachmentSecurity
+public static partial class AttachmentSecurity
 {
     public const int MaxAttachBytes = 25 * 1024 * 1024;
     public const int MaxNameChars = 150;
@@ -106,16 +106,18 @@ public static class AttachmentSecurity
         return false;
     }
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle file, [Out] char[] path, uint length, uint flags);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static unsafe partial uint GetFinalPathNameByHandleW(Microsoft.Win32.SafeHandles.SafeFileHandle file, char* path, uint length, uint flags);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint attributes, IntPtr template);
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security, uint creation, uint attributes, IntPtr template);
 
-    private static string FinalPath(Microsoft.Win32.SafeHandles.SafeFileHandle handle)
+    private static unsafe string FinalPath(Microsoft.Win32.SafeHandles.SafeFileHandle handle)
     {
         var target = new char[32768];
-        uint length = GetFinalPathNameByHandleW(handle, target, (uint)target.Length, 0);
+        uint length;
+        fixed (char* buffer = target)
+            length = GetFinalPathNameByHandleW(handle, buffer, (uint)target.Length, 0);
         if (length == 0 || length >= target.Length) throw new IOException("Attachment path could not be resolved");
         string resolved = new(target, 0, (int)length);
         if (resolved.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return @"\\" + resolved[8..];
@@ -126,17 +128,14 @@ public static class AttachmentSecurity
     {
         string resolved = Path.GetFullPath(path);
         // Resolve parent junctions as well as a final symlink, using the same handle Windows opens for the read.
-        if (OperatingSystem.IsWindows())
+        if (File.Exists(resolved) || Directory.Exists(resolved))
         {
-            if (File.Exists(resolved) || Directory.Exists(resolved))
-            {
-                using var handle = CreateFileW(resolved, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
-                if (handle.IsInvalid) throw new IOException("Path could not be opened for canonical resolution");
-                return FinalPath(handle);
-            }
-            string? parent = Path.GetDirectoryName(resolved);
-            if (parent is not null && parent != resolved) return Path.Combine(Canonical(parent), Path.GetFileName(resolved));
+            using var handle = CreateFileW(resolved, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+            if (handle.IsInvalid) throw new IOException("Path could not be opened for canonical resolution");
+            return FinalPath(handle);
         }
+        string? parent = Path.GetDirectoryName(resolved);
+        if (parent is not null && parent != resolved) return Path.Combine(Canonical(parent), Path.GetFileName(resolved));
         if (resolved.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return @"\\" + resolved[8..];
         return resolved.StartsWith(@"\\?\", StringComparison.Ordinal) ? resolved[4..] : resolved;
     }
@@ -216,17 +215,14 @@ public static class AttachmentSecurity
         }
         finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
 
-        if (OperatingSystem.IsWindows())
+        try
         {
-            try
-            {
-                string zoneStream = freePath + ":Zone.Identifier";
-                File.WriteAllText(zoneStream, ZoneIdentifierContent, Encoding.ASCII);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                // Silently ignore if alternate data streams are not supported (e.g. FAT32)
-            }
+            string zoneStream = freePath + ":Zone.Identifier";
+            File.WriteAllText(zoneStream, ZoneIdentifierContent, Encoding.ASCII);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Silently ignore if alternate data streams are not supported (e.g. FAT32)
         }
 
         return freePath;
@@ -246,7 +242,7 @@ public static class AttachmentSecurity
             throw new InvalidOperationException($"security: attachment from protected or secret path is forbidden ({filePath})");
 
         using var stream = new FileStream(resolved, FileMode.Open, FileAccess.Read, FileShare.Read);
-        string opened = OperatingSystem.IsWindows() ? FinalPath(stream.SafeFileHandle) : resolved;
+        string opened = FinalPath(stream.SafeFileHandle);
         if (IsProtectedPath(opened)) throw new InvalidOperationException("Opened attachment is in a protected location");
         if (stream.Length > MaxAttachBytes) throw new InvalidOperationException("Attachment exceeds maximum size of 25 MB");
         byte[] bytes = new byte[checked((int)stream.Length)]; stream.ReadExactly(bytes);

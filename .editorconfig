@@ -2,6 +2,8 @@ root = true
 
 [*.cs]
 # Analyzers: AnalysisLevel latest-recommended, warnings as errors (native\Directory.Build.props, tests\Directory.Build.props).
+# Win32 calls are source-generated [LibraryImport] declarations: a runtime-marshalled [DllImport] fails the build.
+dotnet_diagnostic.SYSLIB1054.severity = warning
 
 [tests/**.cs]
 # xUnit test names read as sentences with underscores (Method_State_Result).
