@@ -73,6 +73,47 @@ public sealed class GetScriptTests : IDisposable
         Assert.False(Directory.Exists(Apps));
     }
 
+    [Theory]
+    [InlineData("pwsh")]
+    [InlineData("powershell")]
+    public void A_scanner_briefly_holding_the_fresh_executable_does_not_fail_the_installation(string shell)
+    {
+        // What an antivirus does to a freshly written executable: opens it for a moment (every sharing mode allowed),
+        // which blocks renaming its folder. get.ps1 waits that hold out instead of failing ("being used by another
+        // process", seen once in NexusSystem's pack job on a fresh Windows runner).
+        string? held = null;
+        bool stagedWhileHeld = false;
+        using var released = new ManualResetEventSlim();
+        using var watcher = new FileSystemWatcher(root, "NexusAGYmail.exe") { IncludeSubdirectories = true };
+        var scanner = new Thread(() =>
+        {
+            string path = watcher.WaitForChanged(WatcherChangeTypes.Created, 60_000) is { TimedOut: false } change ? Path.Join(root, change.Name) : "";
+            for (int i = 0; i < 400 && held is null && path.Length > 0; i++)
+            {
+                try
+                {
+                    using var scan = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    held = path;
+                    Thread.Sleep(2_000);
+                    stagedWhileHeld = File.Exists(path);
+                }
+                catch (IOException) { Thread.Sleep(5); }  // still being extracted
+            }
+            released.Set();
+        }) { IsBackground = true };
+        watcher.EnableRaisingEvents = true;
+        scanner.Start();
+
+        var (code, output) = Get(shell);
+        Assert.True(released.Wait(60_000, TestContext.Current.CancellationToken));
+        Assert.True(code == 0, output);
+        Assert.NotNull(held);
+        Assert.Contains("staging-", held, StringComparison.OrdinalIgnoreCase);
+        Assert.True(stagedWhileHeld, "the hold must have overlapped the staged folder");
+        Assert.True(File.Exists(Path.Join(Apps, Program.Version, "NexusAGYmail.exe")), output);
+        Assert.Empty(Directory.GetDirectories(root, "staging-*"));
+    }
+
     [Fact]
     public void Docs_and_scripts_never_run_downloaded_code_in_memory()
     {

@@ -66,9 +66,33 @@ function Get-ExpectedHash([byte[]]$Manifest, [string]$Name) {
     return $expected
 }
 
+function Move-StagedFolder([string]$From, [string]$To) {
+    # A folder cannot be renamed while any file inside it is open, whoever holds it. This installer never runs or keeps
+    # open anything in the staged folder, but antivirus and indexing services open freshly written executables for a
+    # moment to scan them: once, on a fresh GitHub Windows runner, the rename failed with "being used by another
+    # process" and passed when run again. Only that external, transient hold (sharing, lock or access violation while
+    # the staged folder is still there) is waited out, at most 10 s; any other error, or a longer hold, fails.
+    $transient = 0x80070020, 0x80070021, 0x80070005  # ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION, ERROR_ACCESS_DENIED
+    for ($attempt = 1; ; $attempt++) {
+        try { [IO.Directory]::Move($From, $To); return }
+        catch {
+            $failure = $_.Exception
+            while ($failure.InnerException -and $failure -is [Management.Automation.MethodInvocationException]) { $failure = $failure.InnerException }
+            $held = ($failure -is [IO.IOException] -or $failure -is [UnauthorizedAccessException]) -and
+                ($transient -contains $failure.HResult) -and (Test-Path -LiteralPath $From) -and -not (Test-Path -LiteralPath $To)
+            if (-not $held -or $attempt -ge 40) { throw "Cannot move $From to $($To): $($failure.Message)" }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+}
+
 function Install-NexusAGYmail {
     $work = Join-Path ([IO.Path]::GetTempPath()) "nexusagymail-$PID"
     New-Item -ItemType Directory -Force -Path $work | Out-Null
+    # Staged next to the install folder (same volume: the final move is a rename), never inside it: NexusSystem reads
+    # the newest NexusAGYmail.exe under app\<version>.
+    New-Item -ItemType Directory -Force -Path $Root | Out-Null
+    $staged = Join-Path (Split-Path -Parent $Root) ('staging-' + [guid]::NewGuid().ToString('N'))
     try {
         if ($env:NEXUS_AGYMAIL_SOURCE) {
             $zip = (Resolve-Path -LiteralPath $env:NEXUS_AGYMAIL_SOURCE).Path
@@ -84,25 +108,30 @@ function Install-NexusAGYmail {
             $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($expected -ne $actual) { throw "SHA-256 mismatch for $($Package): the download is not the published file." }
         }
-        $unpacked = Join-Path $work 'package'
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $unpacked)
-        $exe = Join-Path $unpacked 'NexusAGYmail.exe'
+        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $staged)
+        $exe = Join-Path $staged 'NexusAGYmail.exe'
         if (-not (Test-Path -LiteralPath $exe)) { throw 'Not a NexusAGYmail package.' }
-        Get-ChildItem -LiteralPath $unpacked -Recurse -File | Unblock-File
-        $version = ((& $exe --version) -replace '^NexusAGYmail\s+', '').Trim()
-        if ($LASTEXITCODE -or $version -notmatch '^\d+\.\d+\.\d+$') { throw "The package does not run on this PC ($Arch)." }
+        Get-ChildItem -LiteralPath $staged -Recurse -File | Unblock-File
+        # The version from the executable's version resource, without running it: a program just run from the staged
+        # folder is what scanners open right after, when the folder has to be renamed.
+        $version = "$((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion)".Split('+')[0].Trim()
+        if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Not a NexusAGYmail package (no version).' }
         # One folder per version: a running server keeps its own executable; the new one is used at the next start.
         $target = Join-Path $Root $version
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue }
-        if (-not (Test-Path -LiteralPath $target)) {
-            New-Item -ItemType Directory -Force -Path $Root | Out-Null
-            Move-Item -LiteralPath $unpacked -Destination $target
-        }
+        $moved = $false
+        if (-not (Test-Path -LiteralPath $target)) { Move-StagedFolder $staged $target; $moved = $true }
         $installed = Join-Path $target 'NexusAGYmail.exe'
+        # Run once in place: the package must start on this PC's architecture and report the version it carries.
+        $answer = ((& $installed --version) -replace '^NexusAGYmail\s+', '').Trim()
+        if ($LASTEXITCODE -or $answer -ne $version) {
+            if ($moved) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue }
+            throw "The package does not run on this PC ($Arch)."
+        }
         Say "NexusAGYmail $version is in $target." Green
     } finally {
-        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $work, $staged -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     foreach ($line in @(& $installed setup)) {
