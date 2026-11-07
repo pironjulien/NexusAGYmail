@@ -117,7 +117,7 @@ public sealed class OAuthSignIn
         {
             File.Copy(full, target, overwrite: true);
             try { Dpapi.RestrictToCurrentUser(target); }
-            catch (DpapiError) { /* droits au mieux : le fichier reste dans le dossier d'état de l'utilisateur */ }
+            catch (DpapiException) { /* droits au mieux : le fichier reste dans le dossier d'état de l'utilisateur */ }
         }
         return (target, ProjectOf(data));
     }

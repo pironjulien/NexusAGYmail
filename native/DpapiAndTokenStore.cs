@@ -16,11 +16,11 @@ using System.Threading.Tasks;
 
 namespace NexusAGYmail;
 
-public sealed class DpapiError : IOException
+public sealed class DpapiException : IOException
 {
     public int NativeErrorCode { get; }
 
-    public DpapiError(int code, string message) : base($"{message} (Windows error {code})")
+    public DpapiException(int code, string message) : base($"{message} (Windows error {code})")
     {
         NativeErrorCode = code;
     }
@@ -166,7 +166,7 @@ public static class Dpapi
             }
 
             if (!ok)
-                throw new DpapiError(Marshal.GetLastWin32Error(), "DPAPI encryption refused");
+                throw new DpapiException(Marshal.GetLastWin32Error(), "DPAPI encryption refused");
 
             try
             {
@@ -219,7 +219,7 @@ public static class Dpapi
         if (TryUnprotectCore(data, entropy, useDefaultEntropy, out byte[]? result, out int err))
             return result!;
 
-        throw new DpapiError(err, "DPAPI decryption refused (another user, another PC or a damaged file)");
+        throw new DpapiException(err, "DPAPI decryption refused (another user, another PC or a damaged file)");
     }
 
     private static unsafe bool TryUnprotectCore(
@@ -284,7 +284,7 @@ public static class Dpapi
     public static string CurrentUserSid()
     {
         if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, out IntPtr token))
-            throw new DpapiError(Marshal.GetLastWin32Error(), "OpenProcessToken refused");
+            throw new DpapiException(Marshal.GetLastWin32Error(), "OpenProcessToken refused");
         try
         {
             GetTokenInformation(token, TokenUser, IntPtr.Zero, 0, out uint size);
@@ -292,10 +292,10 @@ public static class Dpapi
             try
             {
                 if (!GetTokenInformation(token, TokenUser, buffer, size, out _))
-                    throw new DpapiError(Marshal.GetLastWin32Error(), "GetTokenInformation refused");
+                    throw new DpapiException(Marshal.GetLastWin32Error(), "GetTokenInformation refused");
                 var sidAttr = Marshal.PtrToStructure<SID_AND_ATTRIBUTES>(buffer);
                 if (!ConvertSidToStringSidW(sidAttr.Sid, out IntPtr strPtr))
-                    throw new DpapiError(Marshal.GetLastWin32Error(), "ConvertSidToStringSidW refused");
+                    throw new DpapiException(Marshal.GetLastWin32Error(), "ConvertSidToStringSidW refused");
                 try
                 {
                     return Marshal.PtrToStringUni(strPtr) ?? "";
@@ -354,9 +354,9 @@ public static class Dpapi
             using var proc = Process.Start(psi);
             proc?.WaitForExit(5000);
         }
-        catch (Exception ex)  // boundary: any icacls failure becomes a DpapiError for the callers
+        catch (Exception ex)  // boundary: any icacls failure becomes a DpapiException for the callers
         {
-            throw new DpapiError(Marshal.GetLastWin32Error(), $"permissions not applied to {path}: {ex.Message}");
+            throw new DpapiException(Marshal.GetLastWin32Error(), $"permissions not applied to {path}: {ex.Message}");
         }
     }
 }
@@ -415,7 +415,7 @@ public sealed class TokenStore
         {
             if (created)
             {
-                try { Dpapi.RestrictToCurrentUser(LockPath); } catch (DpapiError) { /* best effort: the lock file holds no secret */ }
+                try { Dpapi.RestrictToCurrentUser(LockPath); } catch (DpapiException) { /* best effort: the lock file holds no secret */ }
             }
 
             var sw = Stopwatch.StartNew();
@@ -505,7 +505,7 @@ public sealed class TokenStore
         {
             plain = Dpapi.Unprotect(File.ReadAllBytes(TokenPath));
         }
-        catch (DpapiError ex)
+        catch (DpapiException ex)
         {
             throw new TokenException("unreadable", $"unreadable token ({ex.Message}): sign in again");
         }

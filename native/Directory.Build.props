@@ -1,9 +1,11 @@
 <Project>
   <!-- Every build output of the engine goes to ~\.nexus\build\nexusagymail\native: never into OneDrive or AppData. -->
+  <!-- The user profile comes from .NET, not $(USERPROFILE): Dependabot restores on Linux, where USERPROFILE is unset,
+       so the build went to /.nexus (access denied) and its NuGet updates silently found nothing. -->
   <PropertyGroup>
-    <NexusBuild Condition="'$(NexusBuild)' == ''">$(USERPROFILE)\.nexus\build\nexusagymail\</NexusBuild>
-    <BaseOutputPath>$(NexusBuild)native\bin\</BaseOutputPath>
-    <BaseIntermediateOutputPath>$(NexusBuild)native\obj\</BaseIntermediateOutputPath>
+    <NexusBuild Condition="'$(NexusBuild)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(SpecialFolder.UserProfile)), '.nexus', 'build', 'nexusagymail'))$([System.IO.Path]::DirectorySeparatorChar)</NexusBuild>
+    <BaseOutputPath>$([System.IO.Path]::Combine('$(NexusBuild)', 'native', 'bin'))$([System.IO.Path]::DirectorySeparatorChar)</BaseOutputPath>
+    <BaseIntermediateOutputPath>$([System.IO.Path]::Combine('$(NexusBuild)', 'native', 'obj'))$([System.IO.Path]::DirectorySeparatorChar)</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
   </PropertyGroup>
   <!-- .NET analyzers at the recommended level and every warning an error; NuGet restore pinned by packages.lock.json

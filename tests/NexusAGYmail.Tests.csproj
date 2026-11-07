@@ -9,7 +9,7 @@
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <RootNamespace>NexusAGYmail.Tests</RootNamespace>
     <!-- Test reports outside the sources too (Microsoft.Testing.Platform writes TestResults next to the project otherwise). -->
-    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --results-directory "$(NexusBuild)test\TestResults"</TestingPlatformCommandLineArguments>
+    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --results-directory "$([System.IO.Path]::Combine('$(NexusBuild)', 'test', 'TestResults'))"</TestingPlatformCommandLineArguments>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.0.2" />

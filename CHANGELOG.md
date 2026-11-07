@@ -7,12 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Changed
-- Build quality: .NET analyzers at `latest-recommended` with every warning an error. Culture-dependent formatting and parsing are now explicit (invariant culture), the Ctrl+C source of `auth` is disposed, the path lookup of attachments uses a character buffer, and the error types are named `TokenException` and `GmailAuthException`.
+- Build quality: .NET analyzers at `latest-recommended` with every warning an error. Culture-dependent formatting and parsing are now explicit (invariant culture), the Ctrl+C source of `auth` is disposed, the path lookup of attachments uses a character buffer, and the error types are named `TokenException`, `GmailAuthException` and `DpapiException`.
 - Version: the engine reads its version from the assembly, so `<Version>` in the csproj is the single source (`tools/package.ps1` and the release check it there).
 - NuGet restores are pinned by `packages.lock.json` (locked mode in CI and release); packaging restores both architectures, then publishes without restoring.
 - CI and release take the .NET SDK from `global.json`, as the local build does.
 - Test reports go to `~\.nexus\build\nexusagymail\test\TestResults`, never into the repository.
 - Release: shared NexusSystem workflows v1.6.54.
+- Build output path taken from the user profile given by .NET instead of `USERPROFILE`, so Dependabot's NuGet restores on Linux work again.
+- `packages.lock.json` is checked out with CRLF, as NuGet writes it on Windows: a restore no longer leaves it modified.
+- CodeQL runs from a workflow file (`.github/workflows/codeql.yml`, C# and Actions) instead of the default setup, so OpenSSF Scorecard credits it.
 
 ## [0.16.2] - 2026-11-04
 
