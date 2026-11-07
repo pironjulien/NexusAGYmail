@@ -8,6 +8,8 @@
     <IsTestProject>true</IsTestProject>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <RootNamespace>NexusAGYmail.Tests</RootNamespace>
+    <!-- Source-generated P/Invoke (LibraryImport), as in the engine: NoErrorBoxes.cs. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Test reports outside the sources too (Microsoft.Testing.Platform writes TestResults next to the project otherwise). -->
     <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --results-directory "$([System.IO.Path]::Combine('$(NexusBuild)', 'test', 'TestResults'))"</TestingPlatformCommandLineArguments>
   </PropertyGroup>
