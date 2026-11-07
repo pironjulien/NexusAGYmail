@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-11-07
+
 ### Changed
 - Build quality: .NET analyzers at `latest-recommended` with every warning an error. Culture-dependent formatting and parsing are now explicit (invariant culture), the Ctrl+C source of `auth` is disposed, the path lookup of attachments uses a character buffer, and the error types are named `TokenException`, `GmailAuthException` and `DpapiException`.
 - Version: the engine reads its version from the assembly, so `<Version>` in the csproj is the single source (`tools/package.ps1` and the release check it there).
