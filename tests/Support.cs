@@ -116,9 +116,10 @@ public sealed class NativeServer : IDisposable
 
     public int Pid => process.Id;
 
-    public NativeServer(IDictionary<string, string?> environment)
+    /// <summary>The engine under test, or <paramref name="exe"/> (an installed copy) when given.</summary>
+    public NativeServer(IDictionary<string, string?> environment, string? exe = null)
     {
-        process = Process.Start(Support.StartInfo(Support.Exe, ["--mcp"], environment))!;
+        process = Process.Start(Support.StartInfo(exe ?? Support.Exe, ["--mcp"], environment))!;
         var reader = process.StandardOutput;
         _ = Task.Run(async () =>
         {

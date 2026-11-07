@@ -86,6 +86,27 @@ function Move-StagedFolder([string]$From, [string]$To) {
     }
 }
 
+function Test-FolderInUse([string]$Folder) {
+    # A NexusAGYmail process started from this folder (its executable is in it).
+    $prefix = $Folder.TrimEnd('\') + '\'
+    foreach ($process in @(Get-Process -Name NexusAGYmail -ErrorAction SilentlyContinue)) {
+        $path = try { $process.Path } catch { $null }
+        if ($path -and $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
+function Test-SameFiles([string]$A, [string]$B) {
+    # The same relative file names with the same SHA-256.
+    $list = {
+        param($Folder)
+        $base = (Resolve-Path -LiteralPath $Folder).Path.TrimEnd('\').Length + 1
+        @(Get-ChildItem -LiteralPath $Folder -Recurse -File | Sort-Object FullName |
+            ForEach-Object { $_.FullName.Substring($base) + '|' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join "`n"
+    }
+    return (& $list $A) -ceq (& $list $B)
+}
+
 function Install-NexusAGYmail {
     $work = Join-Path ([IO.Path]::GetTempPath()) "nexusagymail-$PID"
     New-Item -ItemType Directory -Force -Path $work | Out-Null
@@ -117,11 +138,24 @@ function Install-NexusAGYmail {
         # folder is what scanners open right after, when the folder has to be renamed.
         $version = "$((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion)".Split('+')[0].Trim()
         if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Not a NexusAGYmail package (no version).' }
-        # One folder per version: a running server keeps its own executable; the new one is used at the next start.
+        # One folder per version, never modified once written: a running server keeps reading its own files (an engine
+        # loads code from them after it starts), the new version is used at the next start. An existing folder of the
+        # same version is kept when it holds the same files; another build of that version (development channel)
+        # replaces it only while no process runs from it, by renaming it aside first.
         $target = Join-Path $Root $version
-        if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue }
         $moved = $false
         if (-not (Test-Path -LiteralPath $target)) { Move-StagedFolder $staged $target; $moved = $true }
+        elseif (-not (Test-SameFiles $staged $target)) {
+            if (Test-FolderInUse $target) {
+                Say "NexusAGYmail $version is running from $($target): that build stays until it stops (restart Antigravity, then run this again)." Yellow
+            } else {
+                $retired = Join-Path (Split-Path -Parent $Root) ('retired-' + [guid]::NewGuid().ToString('N'))
+                Move-StagedFolder $target $retired
+                try { Move-StagedFolder $staged $target; $moved = $true }
+                catch { Move-StagedFolder $retired $target; throw }
+                Remove-Item -LiteralPath $retired -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
         $installed = Join-Path $target 'NexusAGYmail.exe'
         # Run once in place: the package must start on this PC's architecture and report the version it carries.
         $answer = ((& $installed --version) -replace '^NexusAGYmail\s+', '').Trim()
@@ -139,9 +173,8 @@ function Install-NexusAGYmail {
     }
     $code = $LASTEXITCODE
     # Older versions no process still runs.
-    $running = @(Get-Process -Name NexusAGYmail -ErrorAction SilentlyContinue | ForEach-Object { $_.Path })
     foreach ($old in @(Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue)) {
-        if ($old.FullName -eq $target -or $running -contains (Join-Path $old.FullName 'NexusAGYmail.exe')) { continue }
+        if ($old.FullName -eq $target -or (Test-FolderInUse $old.FullName)) { continue }
         Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($Auth -and -not $Pack) {

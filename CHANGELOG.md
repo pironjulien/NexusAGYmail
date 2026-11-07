@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-11-07
+
+### Fixed
+- An update never changes a version folder a server runs from. `get.ps1` used to delete `app\<version>` before installing the same version again: every file not held open was removed under a running server (an engine loads code from its own files after it starts), and another build of that version (development channel) was silently not installed. A folder holding the same files is now kept untouched; another build replaces it only while no process runs from it (renamed aside first), otherwise the running build stays and the run says so. Older versions are removed only when no process runs from them. A test runs servers from the installed and an older version during two updates, checks every file unchanged and calls them again.
+
 ## [0.16.4] - 2026-11-07
 
 ### Fixed

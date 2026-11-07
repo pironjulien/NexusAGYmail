@@ -114,6 +114,73 @@ public sealed class GetScriptTests : IDisposable
         Assert.Empty(Directory.GetDirectories(root, "staging-*"));
     }
 
+    /// <summary>Every file of a folder with its SHA-256, by relative name.</summary>
+    private static string Snapshot(string folder) => string.Join('\n', Directory.GetFiles(folder, "*", SearchOption.AllDirectories)
+        .Order(StringComparer.OrdinalIgnoreCase)
+        .Select(f => Path.GetRelativePath(folder, f) + "|" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(f)))));
+
+    [Theory]
+    [InlineData("pwsh")]
+    [InlineData("powershell")]
+    public async Task Servers_started_before_an_update_keep_working_after_it(string shell)
+    {
+        // What broke NexusFree 1.3.3's open sessions: an engine loads code from its own files after it starts (lazily
+        // loaded assemblies, or a single-file bundle reading itself), so an update must never change, remove or replace
+        // a file of a folder a server runs from. Two servers run while get.ps1 updates: one from the installed version
+        // (the same build reinstalled, then another build of that version), one from an older version folder.
+        var (code, output) = Get(shell);
+        Assert.True(code == 0, output);
+        string current = Path.Join(Apps, Program.Version);
+        string older = Path.Join(Apps, "0.0.1");
+        Directory.CreateDirectory(older);
+        foreach (string file in Directory.GetFiles(current))
+            File.Copy(file, Path.Join(older, Path.GetFileName(file)));
+
+        await using var fake = new FakeGmail();
+        fake.Received("m1", "Un texte accentué é", "Premier");
+        NativeServer Start(string folder)
+        {
+            string home = Path.Join(root, "server-" + Path.GetFileName(folder));
+            string state = Path.Join(home, ".nexus", "nexus-agymail");
+            Directory.CreateDirectory(state);
+            File.WriteAllText(Path.Join(state, "token.json"), Support.TestToken(FakeGmail.NewScopes).ToJsonString());
+            var environment = Support.IsolatedEnvironment(home);
+            environment["NEXUS_AGYMAIL_API_BASE"] = fake.ApiBase;
+            environment["NEXUS_AGYMAIL_TOKEN_URI"] = fake.BaseUrl + "/never-refresh";
+            var server = new NativeServer(environment, Path.Join(folder, "NexusAGYmail.exe"));
+            server.Rpc("initialize", new JsonObject { ["protocolVersion"] = "2025-06-18", ["clientInfo"] = new JsonObject { ["name"] = "Antigravity" }, ["capabilities"] = new JsonObject() });
+            return server;
+        }
+
+        string currentBefore = Snapshot(current), olderBefore = Snapshot(older);
+        using (var onCurrent = Start(current))
+        using (var onOlder = Start(older))
+        {
+            (code, output) = Get(shell);
+            Assert.True(code == 0, "reinstalling the same build must succeed: " + output);
+            // Another build of the same version (a development release): an extra file makes it differ.
+            using (var zip = ZipFile.Open(Zip, ZipArchiveMode.Update))
+                using (var writer = new StreamWriter(zip.CreateEntry("build.txt").Open())) writer.Write("another build");
+            (code, output) = Get(shell);
+            Assert.True(code == 0, output);
+
+            Assert.Equal(currentBefore, Snapshot(current));
+            Assert.Equal(olderBefore, Snapshot(older));
+            foreach (var server in new[] { onCurrent, onOlder })
+            {
+                Assert.Equal("success", server.Call("search_threads")["status"]?.GetValue<string>());
+                Assert.Contains("Premier", server.Call("get_message", new JsonObject { ["messageId"] = "m1" })["message"]!["subject"]!.GetValue<string>());
+            }
+        }
+
+        // Once those servers stopped, the next run installs the other build and removes the older version.
+        (code, output) = Get(shell);
+        Assert.True(code == 0, output);
+        Assert.True(File.Exists(Path.Join(current, "build.txt")), output);
+        Assert.False(Directory.Exists(older));
+        Assert.Empty(Directory.GetDirectories(root, "retired-*"));
+    }
+
     [Fact]
     public void Docs_and_scripts_never_run_downloaded_code_in_memory()
     {
