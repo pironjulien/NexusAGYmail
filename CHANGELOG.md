@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-11-07
+
+### Fixed
+- `retired-*` folders in `~\.nexus\nexus-agymail` no longer stay for ever: a version folder set aside by `get.ps1` whose deletion failed at that instant (a file in it held open by a scanner or an editor) is now removed on a later run, never while it may still be used (a running server's image in it, its `engine.lock` held, or a server that cannot be read). Tests under PowerShell 7 and Windows PowerShell 5.1, each failing without the fix.
+
 ## [0.16.6] - 2026-11-07
 
 ### Fixed

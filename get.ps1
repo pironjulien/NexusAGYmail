@@ -134,6 +134,15 @@ function Test-FolderInUse([string]$Folder, $Images = (Get-EngineImages)) {
     return $false
 }
 
+function Remove-RetiredFolders($Images) {
+    # retired-* folders beside the install folder that did not go when they were set aside (a file in them held open
+    # by a scanner or an editor at that instant): removed on a later run, never while they may still be used.
+    $parent = Split-Path -Parent $Root
+    foreach ($left in @(Get-ChildItem -LiteralPath $parent -Directory -Filter 'retired-*' -ErrorAction SilentlyContinue)) {
+        if (-not (Test-FolderInUse $left.FullName $Images)) { Remove-Item -LiteralPath $left.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 function Test-SameFiles([string]$A, [string]$B) {
     # The same relative file names with the same SHA-256.
     $list = {
@@ -215,6 +224,7 @@ function Install-NexusAGYmail {
     # Older versions no process still uses: renamed aside first (refused while a file in them is open, as the lock of
     # an engine starting meanwhile), then deleted.
     $images = Get-EngineImages
+    Remove-RetiredFolders $images
     foreach ($old in @(Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue)) {
         if ($old.FullName -eq $target -or (Test-FolderInUse $old.FullName $images)) { continue }
         $retired = Join-Path (Split-Path -Parent $Root) ('retired-' + [guid]::NewGuid().ToString('N'))

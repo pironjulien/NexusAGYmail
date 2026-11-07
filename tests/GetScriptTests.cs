@@ -215,6 +215,61 @@ public sealed class GetScriptTests : IDisposable
         Assert.Equal("False", Run("$i = Get-EngineImages; $i.Unknown"));
     }
 
+    [Theory]
+    [InlineData("pwsh")]
+    [InlineData("powershell")]
+    public void A_retired_folder_that_did_not_go_at_once_goes_on_the_next_run(string shell)
+    {
+        // A file of a version folder set aside (retired-*) held open at that instant (a scanner, an editor): the folder
+        // stays, and the next run removes it instead of leaving it in ~\.nexus\nexus-agymail for ever.
+        Assert.True(Get(shell).Code == 0);
+        string left = Path.Join(root, "retired-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(left);
+        File.WriteAllText(Path.Join(left, "NexusAGYmail.exe"), "left over");
+        using (new FileStream(Path.Join(left, "NexusAGYmail.exe"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            var (code, output) = Get(shell);
+            Assert.True(code == 0, output);
+            Assert.True(Directory.Exists(left));
+        }
+        var (again, log) = Get(shell);
+        Assert.True(again == 0, log);
+        Assert.False(Directory.Exists(left), log);
+        Assert.Single(Directory.GetDirectories(Apps));
+    }
+
+    [Theory]
+    [InlineData("pwsh")]
+    [InlineData("powershell")]
+    public void A_retired_folder_stays_while_an_engine_cannot_be_read(string shell)
+    {
+        // An elevated or other-session engine the scan cannot read could still run from a retired folder (Windows renames
+        // the folder of a running single-file program): it goes only once every engine can be read.
+        string left = Path.Join(root, "retired-unreadable");
+        Directory.CreateDirectory(left);
+        File.WriteAllText(Path.Join(left, "NexusAGYmail.exe"), "left over");
+        string scope = $"$Root = '{Apps}'; ";
+        Assert.Equal("", RunFunctions(shell, scope + "Remove-RetiredFolders ([pscustomobject]@{ Paths = @(); Unknown = $true })"));
+        Assert.True(File.Exists(Path.Join(left, "NexusAGYmail.exe")));
+        Assert.Equal("", RunFunctions(shell, scope + $"Remove-RetiredFolders ([pscustomobject]@{{ Paths = @('{Path.Join(left, "NexusAGYmail.exe")}'); Unknown = $false }})"));
+        Assert.True(File.Exists(Path.Join(left, "NexusAGYmail.exe")));
+        Assert.Equal("", RunFunctions(shell, scope + "Remove-RetiredFolders ([pscustomobject]@{ Paths = @(); Unknown = $false })"));
+        Assert.False(Directory.Exists(left));
+    }
+
+    /// <summary>get.ps1's functions alone (none of its main block), then <paramref name="body"/>; its output.</summary>
+    private static string RunFunctions(string shell, string body)
+    {
+        string script = "$ast = [Management.Automation.Language.Parser]::ParseFile('" + Path.Join(Support.Repository, "get.ps1") + "', [ref]$null, [ref]$null); " +
+            "foreach ($f in $ast.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] }, $false)) { Invoke-Expression $f.Extent.Text }; " + body;
+        var info = new ProcessStartInfo(shell) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script }) info.ArgumentList.Add(a);
+        using var process = Process.Start(info)!;
+        string output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+        Assert.True(process.WaitForExit(60_000), "PowerShell did not finish");
+        return output.Trim();
+    }
+
     [Fact]
     public void Docs_and_scripts_never_run_downloaded_code_in_memory()
     {
