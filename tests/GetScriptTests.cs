@@ -156,6 +156,9 @@ public sealed class GetScriptTests : IDisposable
         using (var onCurrent = Start(current))
         using (var onOlder = Start(older))
         {
+            // Each server holds the engine.lock of its folder (EngineLock): the cleanup cannot take it.
+            foreach (string folder in new[] { current, older })
+                Assert.Throws<IOException>(() => new FileStream(Path.Join(folder, "engine.lock"), FileMode.Open, FileAccess.ReadWrite, FileShare.None).Dispose());
             (code, output) = Get(shell);
             Assert.True(code == 0, "reinstalling the same build must succeed: " + output);
             // Another build of the same version (a development release): an extra file makes it differ.
@@ -179,6 +182,37 @@ public sealed class GetScriptTests : IDisposable
         Assert.True(File.Exists(Path.Join(current, "build.txt")), output);
         Assert.False(Directory.Exists(older));
         Assert.Empty(Directory.GetDirectories(root, "retired-*"));
+    }
+
+    [Theory]
+    [InlineData("pwsh")]
+    [InlineData("powershell")]
+    public void A_folder_is_in_use_while_its_lock_is_held_an_image_is_in_it_or_an_engine_cannot_be_read(string shell)
+    {
+        // Windows renames the folder of a running single-file program (only mapped) and Get-Process gives no path for
+        // an elevated one: get.ps1 decides with the engine's lock and QueryFullProcessImageNameW, and keeps everything
+        // while a running engine cannot be read.
+        string folder = Path.Join(root, "1.0.0");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Join(folder, "engine.lock"), "");
+        string Run(string body)
+        {
+            string script = "$ast = [Management.Automation.Language.Parser]::ParseFile('" + Path.Join(Support.Repository, "get.ps1") + "', [ref]$null, [ref]$null); " +
+                "foreach ($f in $ast.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] }, $false)) { Invoke-Expression $f.Extent.Text }; " + body;
+            var info = new ProcessStartInfo(shell) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (string a in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script }) info.ArgumentList.Add(a);
+            using var process = Process.Start(info)!;
+            string output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+            Assert.True(process.WaitForExit(60_000), "PowerShell did not finish");
+            return output.Trim();
+        }
+        string none = "([pscustomobject]@{ Paths = @(); Unknown = $false })";
+        Assert.Equal("False", Run($"Test-FolderInUse '{folder}' {none}"));
+        Assert.Equal("True", Run($"Test-FolderInUse '{folder}' ([pscustomobject]@{{ Paths = @(); Unknown = $true }})"));
+        Assert.Equal("True", Run($"Test-FolderInUse '{folder}' ([pscustomobject]@{{ Paths = @('{Path.Join(folder, "NexusAGYmail.exe")}'); Unknown = $false }})"));
+        using (new FileStream(Path.Join(folder, "engine.lock"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            Assert.Equal("True", Run($"Test-FolderInUse '{folder}' {none}"));
+        Assert.Equal("False", Run("$i = Get-EngineImages; $i.Unknown"));
     }
 
     [Fact]

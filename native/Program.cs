@@ -12,6 +12,7 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        EngineLock.Hold();
         string command = args.Length > 0 ? args[0] : "";
         switch (command)
         {

@@ -86,12 +86,50 @@ function Move-StagedFolder([string]$From, [string]$To) {
     }
 }
 
-function Test-FolderInUse([string]$Folder) {
-    # A NexusAGYmail process started from this folder (its executable is in it).
-    $prefix = $Folder.TrimEnd('\') + '\'
+function Get-EngineImages {
+    # Image paths of the running NexusAGYmail processes, read by QueryFullProcessImageNameW with
+    # PROCESS_QUERY_LIMITED_INFORMATION: unlike Get-Process .Path (empty for an elevated process), it reads every process
+    # of this user. Unknown: one runs but cannot be read at all; no folder is then taken as unused.
+    if (-not ('NexusAgymailProcessImage' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class NexusAgymailProcessImage {
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, int id);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr handle, out uint code);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder name, ref uint size);
+    // Image path of a process; "" once it has exited; null while it runs but cannot be read.
+    public static string Read(int id) {
+        IntPtr handle = OpenProcess(0x1000, false, id);  // PROCESS_QUERY_LIMITED_INFORMATION
+        if (handle == IntPtr.Zero) return Marshal.GetLastWin32Error() == 87 ? "" : null;  // 87: no such process
+        try {
+            StringBuilder name = new StringBuilder(32768); uint size = (uint)name.Capacity;
+            if (QueryFullProcessImageNameW(handle, 0, name, ref size)) return name.ToString(0, (int)size);
+            uint code; return GetExitCodeProcess(handle, out code) && code != 259 ? "" : null;  // 259: STILL_ACTIVE
+        } finally { CloseHandle(handle); }
+    }
+}
+'@
+    }
+    $paths = New-Object Collections.Generic.List[string]; $unknown = $false
     foreach ($process in @(Get-Process -Name NexusAGYmail -ErrorAction SilentlyContinue)) {
-        $path = try { $process.Path } catch { $null }
-        if ($path -and $path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        $path = [NexusAgymailProcessImage]::Read($process.Id)
+        if ($null -eq $path) { $unknown = $true } elseif ($path) { $paths.Add($path) }
+    }
+    [pscustomobject]@{ Paths = $paths.ToArray(); Unknown = $unknown }
+}
+
+function Test-FolderInUse([string]$Folder, $Images = (Get-EngineImages)) {
+    # A folder may still be used when a NexusAGYmail process cannot be read, when one runs from it (its executable is
+    # in it), or when its engine.lock is held: every engine holds the one of its folder for its whole life
+    # (EngineLock.cs), whatever spelling of the path started it. Windows renames the folder of a running single-file
+    # program (only mapped, no file open), so a rename alone cannot tell.
+    if ($Images.Unknown) { return $true }
+    $prefix = $Folder.TrimEnd('\') + '\'
+    if ($Images.Paths | Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }) { return $true }
+    $lock = Join-Path $Folder 'engine.lock'
+    if (Test-Path -LiteralPath $lock -PathType Leaf) {
+        try { [IO.File]::Open($lock, 'Open', 'ReadWrite', 'None').Dispose() } catch { return $true }
     }
     return $false
 }
@@ -134,6 +172,8 @@ function Install-NexusAGYmail {
         $exe = Join-Path $staged 'NexusAGYmail.exe'
         if (-not (Test-Path -LiteralPath $exe)) { throw 'Not a NexusAGYmail package.' }
         Get-ChildItem -LiteralPath $staged -Recurse -File | Unblock-File
+        # Held by each engine run from the installed folder (EngineLock.cs): the cleanup below sees it in use.
+        [IO.File]::WriteAllText((Join-Path $staged 'engine.lock'), '')
         # The version from the executable's version resource, without running it: a program just run from the staged
         # folder is what scanners open right after, when the folder has to be renamed.
         $version = "$((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion)".Split('+')[0].Trim()
@@ -172,10 +212,14 @@ function Install-NexusAGYmail {
         if ($line -like 'NEXUS_PACK_RESULT*') { $script:PackResult = $line } else { Say $line }
     }
     $code = $LASTEXITCODE
-    # Older versions no process still runs.
+    # Older versions no process still uses: renamed aside first (refused while a file in them is open, as the lock of
+    # an engine starting meanwhile), then deleted.
+    $images = Get-EngineImages
     foreach ($old in @(Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue)) {
-        if ($old.FullName -eq $target -or (Test-FolderInUse $old.FullName)) { continue }
-        Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        if ($old.FullName -eq $target -or (Test-FolderInUse $old.FullName $images)) { continue }
+        $retired = Join-Path (Split-Path -Parent $Root) ('retired-' + [guid]::NewGuid().ToString('N'))
+        try { [IO.Directory]::Move($old.FullName, $retired) } catch { continue }
+        Remove-Item -LiteralPath $retired -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($Auth -and -not $Pack) {
         # Its own console (questions, browser): Start-Process keeps it attached, outside this function's output.

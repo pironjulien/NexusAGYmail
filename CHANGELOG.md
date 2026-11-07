@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.16.6] - 2026-11-07
+
+### Fixed
+- An update could delete the version folder of a server started elevated: `get.ps1` looked for running servers with `Get-Process`, whose path is empty for an elevated process, and took such a folder as unused. Each engine now holds the `engine.lock` the installer writes in its version folder for its whole life (whatever path spelling started it); running servers are read by `QueryFullProcessImageNameW`, which also reads an elevated process, and no folder is taken as unused while one cannot be read. An older version is renamed aside before it is deleted. Tests: lock held, image in the folder, unreadable server, and running servers holding their locks during updates.
+
 ## [0.16.5] - 2026-11-07
 
 ### Fixed
