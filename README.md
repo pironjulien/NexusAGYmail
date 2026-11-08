@@ -314,7 +314,8 @@ guided sign-in, `setup` in a temporary home, `get.ps1` on a local package under 
 5.1, and recipient lists and attachment names over thousands of seeded inputs. Build and test outputs go to
 `~\.nexus\build\nexusagymail`; `NEXUS_AGYMAIL_TEST_EXE` tests an executable already built. `tools/package.ps1 -Version
 X.Y.Z` builds the release files locally; each push to main builds, attests and publishes them as a development
-`vX.Y.Z-dev.N` pre-release, promoted as is to the stable `vX.Y.Z` by hand (`release.yml`).
+`vX.Y.Z-dev.N` pre-release, promoted as is to the stable `vX.Y.Z` right after when that version is not released yet,
+or by hand (`release.yml`).
 
 ---
 
