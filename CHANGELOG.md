@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-11-08
+
+### Fixed
+- Shared journal: `ts` is written in the common shape of the Nexus products (UTC, milliseconds, `Z`, such as
+  `2026-11-08T10:15:30.123Z`) instead of the round-trip form with seven decimals and `+00:00`; a send whose outcome
+  Gmail left unknown is journaled `~` instead of `✗`; a send waiting for the confirmation dialog writes the stable code
+  `confirmation` as `erreur` instead of the generic `error`.
+
+### Changed
+- Tests: the journal test checks every field of the shared format v1 on each line (`v` 1, `ts`, `outil` the engine
+  version, `app` `gmail`, `issue` among the valid values, `ms` a non-negative integer, `erreur` null on success and
+  the stable code on a failure, never its message), so a journal that goes silent or loses a field fails the tests.
+
 ## [0.17.0] - 2026-11-08
 
 ### Changed
@@ -475,7 +488,8 @@ First public release.
 - Token encrypted with DPAPI on Windows, a `0600` file on macOS and Linux, written atomically under a lock.
 - Retries with exponential backoff on 429 and 5xx, batched reads, bounded sizes, exact error codes.
 
-[Unreleased]: https://github.com/pironjulien/NexusAGYmail/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusAGYmail/compare/v0.17.1...HEAD
+[0.17.1]: https://github.com/pironjulien/NexusAGYmail/compare/v0.17.0...v0.17.1
 [0.17.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.8...v0.17.0
 [0.16.8]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.6...v0.16.7

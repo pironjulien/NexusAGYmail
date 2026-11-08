@@ -279,12 +279,36 @@ public class NativeBehaviourTests
         Assert.Equal("native", S(status["runtime"]));
         Assert.Equal(box.Server.Pid, status["pid"]!.GetValue<int>());
         Assert.Equal(Program.Version, S(status["version"]));
+        // A failure: its line carries the stable code, never Gmail's message.
+        Assert.Equal("not_found", S(box.Call("get_message", A(("messageId", "absent-secret-id")))["code"]));
         string journal = Directory.GetFiles(Path.Join(box.Home, "journal", "agymail", "antigravity"), "*.jsonl").Single();
+        Assert.Matches(@"^\d{4}-\d{2}\.jsonl$", Path.GetFileName(journal));
         string text = File.ReadAllText(journal);
-        var actions = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => S(JsonNode.Parse(l)!["action"])).ToHashSet();
-        Assert.Superset(new HashSet<string> { "auth_status", "get_draft", "download_attachment" }, actions);
-        foreach (string needle in new[] { "rapport.pdf", "previous instructions", "m-d1", "example.com" })
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => JsonNode.Parse(l)!.AsObject()).ToList();
+        var actions = lines.Select(l => S(l["action"])).ToHashSet();
+        Assert.Superset(new HashSet<string> { "auth_status", "get_draft", "download_attachment", "get_message" }, actions);
+        foreach (string needle in new[] { "rapport.pdf", "previous instructions", "m-d1", "example.com", "absent-secret-id", "Requested entity" })
             Assert.DoesNotContain(needle, text);
+        // Shared journal FORMAT.md v1: one complete line per tool call, so a journal that goes silent or loses a field
+        // fails here (NexusRelay's journal stopped for 9 days after an engine rewrite without any test noticing).
+        string[] validIssues = ["✓", "=", "~", "✗", "refus", "différé", "arrêt"];
+        foreach (var line in lines)
+        {
+            foreach (string key in new[] { "v", "ts", "agent", "outil", "appel", "app", "cadre", "action", "technique", "issue", "ms", "premier_plan", "erreur" })
+                Assert.True(line.ContainsKey(key), $"journal line without {key}: {line.ToJsonString()}");
+            Assert.Equal(1, line["v"]!.GetValue<int>());
+            Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", S(line["ts"]));
+            Assert.Equal("antigravity", S(line["agent"]));
+            Assert.Equal(Program.Version, S(line["outil"]));
+            Assert.Equal("gmail", S(line["app"]));
+            Assert.Contains(S(line["issue"]), validIssues);
+            Assert.Equal(System.Text.Json.JsonValueKind.Number, line["ms"]!.GetValueKind());
+            Assert.True(line["ms"]!.AsValue().TryGetValue(out long ms) && ms >= 0, $"ms must be a non-negative integer: {line["ms"]}");
+            if (S(line["issue"]) == "✓") Assert.Null(line["erreur"]);
+            else Assert.Matches("^[a-z_]+$", S(line["erreur"]));
+        }
+        Assert.Contains(lines, l => S(l["action"]) == "auth_status" && S(l["issue"]) == "✓");
+        Assert.Contains(lines, l => S(l["action"]) == "get_message" && S(l["issue"]) == "✗" && S(l["erreur"]) == "not_found");
     }
 
     [Fact]

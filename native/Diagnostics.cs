@@ -33,9 +33,11 @@ internal static class Diagnostics
             string status = result["status"]?.GetValue<string>() ?? "error";
             bool success = status is "success" or "authenticated";
             var now = DateTimeOffset.UtcNow;
-            var line = new JsonObject { ["v"] = 1, ["ts"] = now.ToString("O"), ["agent"] = agent, ["outil"] = Program.Version,
+            // Shared journal FORMAT.md v1: the same UTC timestamp shape as the other Nexus products (milliseconds, Z);
+            // a send whose outcome Gmail left unknown is "~", never a failure.
+            var line = new JsonObject { ["v"] = 1, ["ts"] = now.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture), ["agent"] = agent, ["outil"] = Program.Version,
                 ["appel"] = null, ["app"] = "gmail", ["cadre"] = null, ["action"] = tool, ["technique"] = "api",
-                ["issue"] = success ? "✓" : status == "confirmation_required" ? "refus" : "✗", ["ms"] = milliseconds,
+                ["issue"] = success ? "✓" : status == "confirmation_required" ? "refus" : status == "unknown" ? "~" : "✗", ["ms"] = Math.Max(0L, milliseconds),
                 ["premier_plan"] = false, ["erreur"] = success ? null : result["code"]?.DeepClone() ?? JsonValue.Create("error") };
             string directory = Path.Join(root, "agymail", agent); Directory.CreateDirectory(directory);
             File.AppendAllText(Path.Join(directory, now.ToString("yyyy-MM", CultureInfo.InvariantCulture) + ".jsonl"), line.ToJsonString() + "\n", new UTF8Encoding(false));

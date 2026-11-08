@@ -89,7 +89,7 @@ public sealed class McpServer
                 var (sendValue, inputRequired) = ConfirmSend(args, request["params"] as JsonObject);
                 if (inputRequired is not null)
                 {
-                    Diagnostics.Journal(clientName, name, new JsonObject { ["status"] = "confirmation_required" }, elapsed.ElapsedMilliseconds);
+                    Diagnostics.Journal(clientName, name, new JsonObject { ["status"] = "confirmation_required", ["code"] = "confirmation" }, elapsed.ElapsedMilliseconds);
                     return Result(inputRequired);
                 }
                 value = sendValue!;
