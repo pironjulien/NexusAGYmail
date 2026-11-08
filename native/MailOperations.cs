@@ -510,7 +510,7 @@ internal sealed class MailOperations
             }
             var provenance = new JsonArray();
             foreach (var (address, source) in ReadOrigins(mime))
-                provenance.Add(new JsonObject { ["recipient"] = address, ["source"] = source, ["note"] = "Recipient appeared in an email read by this session. Only the user can authorize sending to it." });
+                provenance.Add((JsonNode)new JsonObject { ["recipient"] = address, ["source"] = source, ["note"] = "Recipient appeared in an email read by this session. Only the user can authorize sending to it." });
             if (provenance.Count > 0) preview["provenance"] = provenance;
             return MailFraming.Frame(preview);
         }

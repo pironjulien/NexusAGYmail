@@ -2,17 +2,30 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <Version>0.16.8</Version>
+    <Version>0.17.0</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>NexusAGYmail</AssemblyName>
     <RootNamespace>NexusAGYmail</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <!-- Both release architectures in the restore graph, so packages.lock.json covers the self-contained publishes. -->
+    <!-- Both release architectures in the restore graph, so packages.lock.json covers the release publishes. -->
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- Native AOT: a release is one NexusAGYmail.exe compiled ahead of time per architecture (no .NET to install, no
+         JIT at start-up). The trimming, single-file and AOT analyzers run in every build and, with warnings as errors,
+         no reflection-based JSON or runtime-marshalled call can come back; reflection-based JSON is off in every build
+         of the engine, so the tests run it the way the release does. -->
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- The two packages below are pinned on purpose (see there): their "delete explicit reference" notice is answered. -->
+    <SuppressGenerateILCompilerExplicitPackageReferenceWarning>true</SuppressGenerateILCompilerExplicitPackageReferenceWarning>
+    <SuppressILLinkExplicitPackageReferenceWarning>true</SuppressILLinkExplicitPackageReferenceWarning>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The AOT compiler and the trimmer, pinned like any package (packages.lock.json, Dependabot): left implicit, their
+         version would follow the .NET SDK of the machine and break the locked restore whenever the CI's SDK moves. -->
+    <PackageReference Include="Microsoft.DotNet.ILCompiler" Version="10.0.14" />
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.14" />
     <PackageReference Include="MimeKit" Version="4.18.2" />
     <EmbeddedResource Include="tool-contracts.json" LogicalName="tool-contracts.json" />
     <!-- Shared guardrail policy, byte-identical to the author's common copy (vendored.sha256). -->

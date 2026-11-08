@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-08
+
+### Changed
+- Releases ship `NexusAGYmail.exe` compiled ahead of time (Native AOT) instead of a self-contained single file: 8.0 MB
+  instead of 77 MB for x64, and an MCP session answers `initialize` then `tools/list` in about 17 ms instead of 60 ms
+  (median of 5 starts on the same PC). The release zips and MCP bundles keep the same shape (one `NexusAGYmail.exe`),
+  so `get.ps1`, NexusSystem and existing installations need no change.
+- The engine is AOT-compatible: the trimming, single-file and AOT analyzers run in every build, with warnings as
+  errors; the last five `JsonArray.Add` calls that went through reflection-based JSON now add the node itself.
+  Reflection-based JSON is off in every build of the engine, so the tests run it the way the release does (the whole
+  suite also passed against the AOT executable, `NEXUS_AGYMAIL_TEST_EXE`).
+- The AOT compiler and the trimmer (`Microsoft.DotNet.ILCompiler`, `Microsoft.NET.ILLink.Tasks`) are pinned package
+  references in `packages.lock.json`: left implicit, their version would follow the machine's .NET SDK and break the
+  locked restore of the CI whenever its SDK moves.
+
 ### Fixed
 - Tests: no test can show a Windows error box. The test process sets the error mode (no critical-error, crash or
   missing-file box) when it loads, and every process it starts inherits it; a test checks it in a child process.
@@ -460,7 +475,8 @@ First public release.
 - Token encrypted with DPAPI on Windows, a `0600` file on macOS and Linux, written atomically under a lock.
 - Retries with exponential backoff on 429 and 5xx, batched reads, bounded sizes, exact error codes.
 
-[Unreleased]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.8...HEAD
+[Unreleased]: https://github.com/pironjulien/NexusAGYmail/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.8...v0.17.0
 [0.16.8]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.7...v0.16.8
 [0.16.7]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.6...v0.16.7
 [0.16.6]: https://github.com/pironjulien/NexusAGYmail/compare/v0.16.5...v0.16.6

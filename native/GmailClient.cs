@@ -237,13 +237,13 @@ public sealed class GmailClient
         if (addLabels != null)
         {
             var arr = new JsonArray();
-            foreach (var l in addLabels) arr.Add(l);
+            foreach (var l in addLabels) arr.Add((JsonNode?)l);
             payload["addLabelIds"] = arr;
         }
         if (removeLabels != null)
         {
             var arr = new JsonArray();
-            foreach (var l in removeLabels) arr.Add(l);
+            foreach (var l in removeLabels) arr.Add((JsonNode?)l);
             payload["removeLabelIds"] = arr;
         }
 
@@ -258,13 +258,13 @@ public sealed class GmailClient
         if (addLabels != null)
         {
             var arr = new JsonArray();
-            foreach (var l in addLabels) arr.Add(l);
+            foreach (var l in addLabels) arr.Add((JsonNode?)l);
             payload["addLabelIds"] = arr;
         }
         if (removeLabels != null)
         {
             var arr = new JsonArray();
-            foreach (var l in removeLabels) arr.Add(l);
+            foreach (var l in removeLabels) arr.Add((JsonNode?)l);
             payload["removeLabelIds"] = arr;
         }
 

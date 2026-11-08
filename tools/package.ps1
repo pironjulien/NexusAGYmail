@@ -1,5 +1,6 @@
 # Release files of one version (used by .github/workflows/release.yml, runnable locally to check a release):
-#   NexusAGYmail-win-x64.zip, NexusAGYmail-win-arm64.zip  self-contained single-file NexusAGYmail.exe per architecture
+#   NexusAGYmail-win-x64.zip, NexusAGYmail-win-arm64.zip  NexusAGYmail.exe compiled ahead of time (Native AOT), one
+#                                                         file per architecture, no .NET to install
 #   nexus-agymail-<version>-win-x64.mcpb, …-win-arm64.mcpb  MCP bundles (manifest.json, icon, server\NexusAGYmail.exe)
 #   get.ps1                                               the installer, checked and attested like the packages
 #   SHA256SUMS.txt                                        SHA-256 of every file above
@@ -19,14 +20,20 @@ if ($declared -ne $Version) { throw "native\NexusAGYmail.csproj has version $dec
 foreach ($folder in $work, $Out) { if (Test-Path $folder) { Remove-Item $folder -Recurse -Force } }
 New-Item -ItemType Directory -Force $Out | Out-Null
 
+# Native AOT finds the C++ linker through vswhere, which is not on PATH outside a developer prompt.
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+if (Test-Path -LiteralPath $vswhere) { $env:PATH = "$env:PATH;$vswhere" }
 foreach ($rid in 'win-x64', 'win-arm64') {
     $publish = Join-Path $work $rid
     # Restore for both architectures (packages.lock.json, locked mode in CI), then publish this one without restoring.
-    dotnet restore (Join-Path $repo 'native\NexusAGYmail.csproj') -p:SelfContained=true -p:NexusBuild="$work\$rid-build\" -v q
+    dotnet restore (Join-Path $repo 'native\NexusAGYmail.csproj') -p:NexusBuild="$work\$rid-build\" -v q
     if ($LASTEXITCODE) { throw "dotnet restore $rid failed." }
-    dotnet publish (Join-Path $repo 'native\NexusAGYmail.csproj') -c Release -r $rid --self-contained true --no-restore `
-        -p:PublishSingleFile=true -p:DebugType=none -p:NexusBuild="$work\$rid-build\" -o $publish -v q
+    # PublishAot (native\NexusAGYmail.csproj): one NexusAGYmail.exe compiled ahead of time, nothing beside it.
+    dotnet publish (Join-Path $repo 'native\NexusAGYmail.csproj') -c Release -r $rid --no-restore `
+        -p:DebugType=none -p:NexusBuild="$work\$rid-build\" -o $publish -v q
     if ($LASTEXITCODE) { throw "dotnet publish $rid failed." }
+    $produced = @(Get-ChildItem -LiteralPath $publish -File | ForEach-Object Name)
+    if (($produced -join ',') -ne 'NexusAGYmail.exe') { throw "The $rid build is not one ahead-of-time executable: $($produced -join ', ')." }
     $zip = Join-Path $Out "NexusAGYmail-$rid.zip"
     Compress-Archive -LiteralPath (Join-Path $publish 'NexusAGYmail.exe') -DestinationPath $zip
 }

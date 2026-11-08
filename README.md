@@ -45,8 +45,8 @@ and sends a draft only after your explicit yes for that exact draft. Nothing is 
 </tr>
 </table>
 
-Windows 10 and 11 (x64 and Arm64): one self-contained executable, nothing else to install (no Python, no .NET
-runtime). Everything sent to the client is in English. The same tools work without enrolling in the Workspace
+Windows 10 and 11 (x64 and Arm64): one native executable compiled ahead of time (Native AOT, 8 MB), nothing
+else to install (no Python, no .NET runtime). Everything sent to the client is in English. The same tools work without enrolling in the Workspace
 Developer Preview or enabling a remote MCP endpoint: it runs on your machine, with any personal Gmail.
 
 ## Quick start
@@ -298,8 +298,9 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Development
 
-The engine is C# on .NET 10 (`native/`, MimeKit for MIME), one self-contained executable per architecture. You need
-the .NET 10 SDK.
+The engine is C# on .NET 10 (`native/`, MimeKit for MIME), compiled ahead of time (Native AOT) into one executable
+per architecture. You need the .NET 10 SDK; building a release (`tools/package.ps1`) also needs the Visual Studio C++
+build tools (the "Desktop development with C++" workload), which Native AOT links with.
 
 ```powershell
 ./test.ps1    # dotnet test: xUnit v3 suite, no network, no Google account

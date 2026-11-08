@@ -1,7 +1,7 @@
 # Release, in two channels, with the shared Nexus release workflows of NexusSystem.
 # - Development: every push to main checks one version everywhere (the csproj, the plugin, its
 #   skill, server.json and CHANGELOG.md), runs test.ps1 and builds the release files with tools/package.ps1:
-#   NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (self-contained NexusAGYmail.exe), the MCP bundles
+#   NexusAGYmail-win-x64.zip and NexusAGYmail-win-arm64.zip (NexusAGYmail.exe, Native AOT), the MCP bundles
 #   nexus-agymail-X.Y.Z-win-x64.mcpb and nexus-agymail-X.Y.Z-win-arm64.mcpb, get.ps1 and SHA256SUMS.txt.
 #   product-dev-release attests them (Sigstore, keyless: `gh attestation verify <file> --repo pironjulien/NexusAGYmail`)
 #   and publishes the pre-release vX.Y.Z-dev.N (NexusSystem's development channel).
